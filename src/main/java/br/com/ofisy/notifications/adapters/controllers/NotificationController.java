@@ -2,7 +2,7 @@ package br.com.ofisy.notifications.adapters.controllers;
 
 import br.com.ofisy.notifications.adapters.dto.NotificationResponseDTO;
 import br.com.ofisy.notifications.domain.Notification;
-import br.com.ofisy.notifications.domain.NotificationRepository;
+import br.com.ofisy.notifications.application.usecases.NotificationUseCases;
 import br.com.ofisy.notifications.domain.NotificationType;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -18,12 +18,12 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class NotificationController {
 
-    private final NotificationRepository notificationRepository;
+    private final br.com.ofisy.notifications.application.usecases.NotificationUseCases useCases;
 
     @GetMapping("/{id}")
     @PreAuthorize("hasAnyRole('ADMIN','STOCKMAN') or @notificationSecurity.isServiceOrderNotification(#id)")
     public ResponseEntity<NotificationResponseDTO> findById(@PathVariable UUID id) {
-        return notificationRepository.findById(id)
+        return useCases.markAsRead(id)
                 .map(NotificationResponseDTO::fromDomain)
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
@@ -32,11 +32,7 @@ public class NotificationController {
     @PatchMapping("/{id}/read")
     @PreAuthorize("hasAnyRole('ADMIN','STOCKMAN') or @notificationSecurity.isServiceOrderNotification(#id)")
     public ResponseEntity<NotificationResponseDTO> markAsRead(@PathVariable UUID id) {
-        return notificationRepository.findById(id)
-                .map(notification -> {
-                    notification.markAsRead();
-                    return notificationRepository.save(notification);
-                })
+        return useCases.markAsRead(id)
                 .map(NotificationResponseDTO::fromDomain)
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
@@ -45,7 +41,7 @@ public class NotificationController {
     @GetMapping("/stock")
     @PreAuthorize("hasAnyRole('ADMIN','STOCKMAN')")
     public ResponseEntity<List<NotificationResponseDTO>> findStockNotifications() {
-        List<NotificationResponseDTO> result = notificationRepository.findAllByType(NotificationType.LOW_STOCK).stream()
+        List<NotificationResponseDTO> result = useCases.findStockNotifications().stream()
                 .map(NotificationResponseDTO::fromDomain)
                 .toList();
         return ResponseEntity.ok(result);
@@ -54,7 +50,7 @@ public class NotificationController {
     @GetMapping("/stock/unread")
     @PreAuthorize("hasAnyRole('ADMIN','STOCKMAN')")
     public ResponseEntity<List<NotificationResponseDTO>> findUnreadStockNotifications() {
-        List<NotificationResponseDTO> result = notificationRepository.findUnreadByType(NotificationType.LOW_STOCK).stream()
+        List<NotificationResponseDTO> result = useCases.findUnreadStockNotifications().stream()
                 .map(NotificationResponseDTO::fromDomain)
                 .toList();
         return ResponseEntity.ok(result);
@@ -62,7 +58,7 @@ public class NotificationController {
 
     @GetMapping("/service-orders")
     public ResponseEntity<List<NotificationResponseDTO>> findServiceOrderNotifications() {
-        List<NotificationResponseDTO> result = notificationRepository.findAllByType(NotificationType.QUOTE_GENERATED).stream()
+        List<NotificationResponseDTO> result = useCases.findServiceOrderNotifications().stream()
                 .map(NotificationResponseDTO::fromDomain)
                 .toList();
         return ResponseEntity.ok(result);
@@ -70,10 +66,14 @@ public class NotificationController {
 
     @GetMapping("/service-orders/unread")
     public ResponseEntity<List<NotificationResponseDTO>> findUnreadServiceOrderNotifications() {
-        List<NotificationResponseDTO> result = notificationRepository.findUnreadByType(NotificationType.QUOTE_GENERATED).stream()
+        List<NotificationResponseDTO> result = useCases.findUnreadServiceOrderNotifications().stream()
                 .map(NotificationResponseDTO::fromDomain)
                 .toList();
         return ResponseEntity.ok(result);
     }
 }
+
+
+
+
 

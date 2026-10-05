@@ -1,7 +1,7 @@
-﻿package br.com.ofisy.notifications.application.listeners;
+package br.com.ofisy.notifications.application.listeners;
 
 import br.com.ofisy.notifications.domain.Notification;
-import br.com.ofisy.notifications.domain.NotificationRepository;
+import br.com.ofisy.notifications.application.usecases.NotificationUseCases;
 import io.awspring.cloud.sqs.annotation.SqsListener;
 import org.springframework.stereotype.Component;
 
@@ -16,10 +16,10 @@ public class NotificationEventListener {
 
     private static final Logger log = LoggerFactory.getLogger(NotificationEventListener.class);
 
-    private final NotificationRepository notificationRepository;
+    private final br.com.ofisy.notifications.application.usecases.NotificationUseCases useCases;
 
-    public NotificationEventListener(NotificationRepository notificationRepository) {
-        this.notificationRepository = notificationRepository;
+    public NotificationEventListener(br.com.ofisy.notifications.application.usecases.NotificationUseCases useCases) {
+        this.useCases = useCases;
     }
 
     @SqsListener("${app.aws.sqs.notification-queue:techchallenge-ofisy-notifications-queue}")
@@ -47,7 +47,7 @@ public class NotificationEventListener {
             br.com.ofisy.notifications.domain.NotificationMessage message = br.com.ofisy.notifications.domain.NotificationMessage.forLowStock(productName, currentQuantity, minThreshold);
             Notification notification = Notification.createForStock(stockId, message);
             
-            notificationRepository.save(notification);
+            useCases.save(notification);
             log.info("Notification saved for low stock: {}", stockId);
         }
     }
@@ -61,10 +61,13 @@ public class NotificationEventListener {
             br.com.ofisy.notifications.domain.NotificationMessage message = br.com.ofisy.notifications.domain.NotificationMessage.forQuote(quoteId, serviceOrderId, totalPrice);
             Notification notification = Notification.createForQuote(quoteId, message);
             
-            notificationRepository.save(notification);
+            useCases.save(notification);
             log.info("Notification saved for quote generated: {}", quoteId);
         }
     }
 
     record EventWrapper(String eventType, Object payload) {}
 }
+
+
+

@@ -1,4 +1,4 @@
-﻿package br.com.ofisy.notifications.shared.securityfilter;
+package br.com.ofisy.notifications.shared.securityfilter;
 
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.JwtException;
