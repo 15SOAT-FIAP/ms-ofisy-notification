@@ -1,0 +1,180 @@
+package br.com.ofisy.notifications.domain;
+
+import java.time.LocalDateTime;
+import java.util.UUID;
+
+public class Notification {
+
+    private final UUID id;
+    private final NotificationType type;
+    private final UUID stockId;
+    private final UUID quoteId;
+    private final NotificationMessage message;
+    private boolean read;
+    private final LocalDateTime createdAt;
+    private LocalDateTime updatedAt;
+
+    private Notification(Builder builder) {
+        this.id = builder.id;
+        this.type = builder.type;
+        this.stockId = builder.stockId;
+        this.quoteId = builder.quoteId;
+        this.message = builder.message;
+        this.read = builder.read;
+        this.createdAt = builder.createdAt;
+        this.updatedAt = builder.updatedAt;
+    }
+
+    public static Builder builder() {
+        return new Builder();
+    }
+
+    public static Notification createForStock(UUID stockId, NotificationMessage message) {
+        LocalDateTime now = LocalDateTime.now();
+        return builder()
+                .id(UUID.randomUUID())
+                .type(NotificationType.LOW_STOCK)
+                .stockId(stockId)
+                .message(message)
+                .read(false)
+                .createdAt(now)
+                .updatedAt(now)
+                .build();
+    }
+
+    public static Notification createForQuote(UUID quoteId, NotificationMessage message) {
+        LocalDateTime now = LocalDateTime.now();
+        return builder()
+                .id(UUID.randomUUID())
+                .type(NotificationType.QUOTE_GENERATED)
+                .quoteId(quoteId)
+                .message(message)
+                .read(false)
+                .createdAt(now)
+                .updatedAt(now)
+                .build();
+    }
+
+    public void markAsRead() {
+        this.read = true;
+        this.updatedAt = LocalDateTime.now();
+    }
+
+    public UUID getId() {
+        return id;
+    }
+
+    public NotificationType getType() {
+        return type;
+    }
+
+    public UUID getStockId() {
+        return stockId;
+    }
+
+    public UUID getQuoteId() {
+        return quoteId;
+    }
+
+    public UUID getReferenceId() {
+        return stockId != null ? stockId : quoteId;
+    }
+
+    public static Notification reconstruct(UUID id, NotificationType type, String message, UUID referenceId, Boolean read, LocalDateTime createdAt, LocalDateTime updatedAt) {
+        Builder builder = builder()
+                .id(id)
+                .type(type)
+                .message(NotificationMessage.fromString(message))
+                .read(read)
+                .createdAt(createdAt)
+                .updatedAt(updatedAt);
+
+        if (type == NotificationType.LOW_STOCK) {
+            builder.stockId(referenceId);
+        } else {
+            builder.quoteId(referenceId);
+        }
+
+        return builder.build();
+    }
+
+    public static Notification create(NotificationType type, String message, UUID referenceId) {
+        if (type == NotificationType.LOW_STOCK) {
+            return createForStock(referenceId, NotificationMessage.fromString(message));
+        } else {
+            return createForQuote(referenceId, NotificationMessage.fromString(message));
+        }
+    }
+
+    public NotificationMessage getMessage() {
+        return message;
+    }
+
+    public boolean isRead() {
+        return read;
+    }
+
+    public LocalDateTime getCreatedAt() {
+        return createdAt;
+    }
+
+    public LocalDateTime getUpdatedAt() {
+        return updatedAt;
+    }
+
+    public static class Builder {
+        private UUID id;
+        private NotificationType type;
+        private UUID stockId;
+        private UUID quoteId;
+        private NotificationMessage message;
+        private boolean read;
+        private LocalDateTime createdAt;
+        private LocalDateTime updatedAt;
+
+        public Builder id(UUID id) {
+            this.id = id;
+            return this;
+        }
+
+        public Builder type(NotificationType type) {
+            this.type = type;
+            return this;
+        }
+
+        public Builder stockId(UUID stockId) {
+            this.stockId = stockId;
+            return this;
+        }
+
+        public Builder quoteId(UUID quoteId) {
+            this.quoteId = quoteId;
+            return this;
+        }
+
+        public Builder message(NotificationMessage message) {
+            this.message = message;
+            return this;
+        }
+
+        public Builder read(boolean read) {
+            this.read = read;
+            return this;
+        }
+
+        public Builder createdAt(LocalDateTime createdAt) {
+            this.createdAt = createdAt;
+            return this;
+        }
+
+        public Builder updatedAt(LocalDateTime updatedAt) {
+            this.updatedAt = updatedAt;
+            return this;
+        }
+
+        public Notification build() {
+            return new Notification(this);
+        }
+    }
+}
+
