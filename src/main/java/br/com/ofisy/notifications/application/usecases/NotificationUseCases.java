@@ -3,11 +3,12 @@ package br.com.ofisy.notifications.application.usecases;
 import br.com.ofisy.notifications.domain.Notification;
 import br.com.ofisy.notifications.domain.NotificationRepository;
 import br.com.ofisy.notifications.domain.NotificationType;
+import br.com.ofisy.notifications.domain.PaginatedResult;
 import org.springframework.stereotype.Service;
 
-import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.Map;
 
 @Service
 public class NotificationUseCases {
@@ -29,20 +30,20 @@ public class NotificationUseCases {
         });
     }
 
-    public List<Notification> findStockNotifications() {
-        return repository.findAllByType(NotificationType.LOW_STOCK);
+    public PaginatedResult<Notification> findStockNotifications(int limit, Map<String, String> lastEvaluatedKey) {
+        return repository.findAllByType(NotificationType.LOW_STOCK, limit, lastEvaluatedKey);
     }
 
-    public List<Notification> findUnreadStockNotifications() {
-        return repository.findUnreadByType(NotificationType.LOW_STOCK);
+    public PaginatedResult<Notification> findUnreadStockNotifications(int limit, Map<String, String> lastEvaluatedKey) {
+        return repository.findUnreadByType(NotificationType.LOW_STOCK, limit, lastEvaluatedKey);
     }
 
-    public List<Notification> findServiceOrderNotifications() {
-        return repository.findAllByType(NotificationType.QUOTE_GENERATED);
+    public PaginatedResult<Notification> findServiceOrderNotifications(int limit, Map<String, String> lastEvaluatedKey) {
+        return repository.findAllByType(NotificationType.QUOTE_GENERATED, limit, lastEvaluatedKey);
     }
 
-    public List<Notification> findUnreadServiceOrderNotifications() {
-        return repository.findUnreadByType(NotificationType.QUOTE_GENERATED);
+    public PaginatedResult<Notification> findUnreadServiceOrderNotifications(int limit, Map<String, String> lastEvaluatedKey) {
+        return repository.findUnreadByType(NotificationType.QUOTE_GENERATED, limit, lastEvaluatedKey);
     }
     
     public Notification save(Notification notification) {

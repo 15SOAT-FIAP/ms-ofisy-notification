@@ -3,6 +3,7 @@ package br.com.ofisy.notifications.adapters.gateways;
 import br.com.ofisy.notifications.domain.Notification;
 import br.com.ofisy.notifications.domain.NotificationRepository;
 import br.com.ofisy.notifications.domain.NotificationType;
+import br.com.ofisy.notifications.domain.PaginatedResult;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Repository;
 import software.amazon.awssdk.enhanced.dynamodb.DynamoDbEnhancedClient;
@@ -10,10 +11,14 @@ import software.amazon.awssdk.enhanced.dynamodb.DynamoDbIndex;
 import software.amazon.awssdk.enhanced.dynamodb.DynamoDbTable;
 import software.amazon.awssdk.enhanced.dynamodb.Key;
 import software.amazon.awssdk.enhanced.dynamodb.TableSchema;
+import software.amazon.awssdk.enhanced.dynamodb.model.Page;
+import software.amazon.awssdk.enhanced.dynamodb.model.PageIterable;
 import software.amazon.awssdk.enhanced.dynamodb.model.QueryConditional;
+import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
 
-import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -49,34 +54,62 @@ public class DynamoDbNotificationRepositoryImpl implements NotificationRepositor
     }
 
     @Override
-    public List<Notification> findAllByType(NotificationType type) {
+    public PaginatedResult<Notification> findAllByType(NotificationType type, int limit, Map<String, String> exclusiveStartKey) {
         QueryConditional queryConditional = QueryConditional.keyEqualTo(Key.builder().partitionValue(type.name()).build());
-        return typeIndex.query(r -> r.queryConditional(queryConditional)
-                        .scanIndexForward(false)
-                        .limit(50))
-                .stream()
-                .flatMap(page -> page.items().stream())
-                .map(this::toDomain)
-                .collect(Collectors.toList());
+        return executeQuery(queryConditional, null, limit, exclusiveStartKey);
     }
 
     @Override
-    public List<Notification> findUnreadByType(NotificationType type) {
+    public PaginatedResult<Notification> findUnreadByType(NotificationType type, int limit, Map<String, String> exclusiveStartKey) {
         QueryConditional queryConditional = QueryConditional.keyEqualTo(Key.builder().partitionValue(type.name()).build());
         software.amazon.awssdk.enhanced.dynamodb.Expression filterExpression = software.amazon.awssdk.enhanced.dynamodb.Expression.builder()
                 .expression("#r = :readVal")
                 .putExpressionName("#r", "read")
-                .putExpressionValue(":readVal", software.amazon.awssdk.services.dynamodb.model.AttributeValue.builder().bool(false).build())
+                .putExpressionValue(":readVal", AttributeValue.builder().bool(false).build())
                 .build();
                 
-        return typeIndex.query(r -> r.queryConditional(queryConditional)
-                        .filterExpression(filterExpression)
-                        .scanIndexForward(false)
-                        .limit(50))
-                .stream()
-                .flatMap(page -> page.items().stream())
+        return executeQuery(queryConditional, filterExpression, limit, exclusiveStartKey);
+    }
+
+    private PaginatedResult<Notification> executeQuery(QueryConditional conditional, software.amazon.awssdk.enhanced.dynamodb.Expression filter, int limit, Map<String, String> startKeyMap) {
+        Map<String, AttributeValue> startKey = null;
+        if (startKeyMap != null && !startKeyMap.isEmpty()) {
+            startKey = new HashMap<>();
+            for (Map.Entry<String, String> entry : startKeyMap.entrySet()) {
+                startKey.put(entry.getKey(), AttributeValue.builder().s(entry.getValue()).build());
+            }
+        }
+
+        Map<String, AttributeValue> finalStartKey = startKey;
+        PageIterable<DynamoDbNotificationEntity> pagedResults = typeIndex.query(r -> {
+            r.queryConditional(conditional).scanIndexForward(false).limit(limit);
+            if (filter != null) {
+                r.filterExpression(filter);
+            }
+            if (finalStartKey != null) {
+                r.exclusiveStartKey(finalStartKey);
+            }
+        });
+
+        var iterator = pagedResults.iterator();
+        if (!iterator.hasNext()) {
+            return new PaginatedResult<>(List.of(), null);
+        }
+
+        Page<DynamoDbNotificationEntity> page = iterator.next();
+        List<Notification> notifications = page.items().stream()
                 .map(this::toDomain)
                 .collect(Collectors.toList());
+
+        Map<String, String> nextKeyMap = null;
+        if (page.lastEvaluatedKey() != null && !page.lastEvaluatedKey().isEmpty()) {
+            nextKeyMap = new HashMap<>();
+            for (Map.Entry<String, AttributeValue> entry : page.lastEvaluatedKey().entrySet()) {
+                nextKeyMap.put(entry.getKey(), entry.getValue().s());
+            }
+        }
+
+        return new PaginatedResult<>(notifications, nextKeyMap);
     }
 
     private DynamoDbNotificationEntity toEntity(Notification notification) {
@@ -103,4 +136,3 @@ public class DynamoDbNotificationRepositoryImpl implements NotificationRepositor
         );
     }
 }
-
