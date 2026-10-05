@@ -1,4 +1,4 @@
-package br.com.ofisy.notifications.infra.persistence;
+package br.com.ofisy.notifications.adapters.gateways;
 
 import br.com.ofisy.notifications.domain.Notification;
 import br.com.ofisy.notifications.domain.NotificationRepository;
@@ -103,3 +103,4 @@ public class DynamoDbNotificationRepositoryImpl implements NotificationRepositor
         );
     }
 }
+

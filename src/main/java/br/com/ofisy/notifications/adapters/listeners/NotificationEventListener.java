@@ -1,4 +1,4 @@
-package br.com.ofisy.notifications.application.listeners;
+package br.com.ofisy.notifications.adapters.listeners;
 
 import br.com.ofisy.notifications.domain.Notification;
 import br.com.ofisy.notifications.application.usecases.NotificationUseCases;
@@ -68,6 +68,7 @@ public class NotificationEventListener {
 
     record EventWrapper(String eventType, Object payload) {}
 }
+
 
 
 
