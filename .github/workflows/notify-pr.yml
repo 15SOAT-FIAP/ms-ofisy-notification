@@ -12,6 +12,11 @@ jobs:
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
         run: |
+          if [ -z "$DISCORD_WEBHOOK_URL" ]; then
+            echo "⚠️ Secret DISCORD_WEBHOOK_URL is not set or not accessible. Skipping notification."
+            exit 0
+          fi
+
           if [ "${{ github.event.action }}" = "opened" ] || [ "${{ github.event.action }}" = "reopened" ]; then
             TITLE="🔔 Pull Request Aberto"
             COLOR=3447003
