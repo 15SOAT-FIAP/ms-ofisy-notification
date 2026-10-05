@@ -15,7 +15,7 @@ class NotificationTest {
     void shouldCreateStockNotification() {
         UUID stockId = UUID.randomUUID();
 
-        Notification notification = Notification.createForStock(stockId, NotificationMessage.fromString("Estoque baixo para Radiador"));
+        Notification notification = Notification.createForStock(UUID.randomUUID(), stockId, NotificationMessage.fromString("Estoque baixo para Radiador"));
 
         assertThat(notification.getId()).isNotNull();
         assertThat(notification.getType()).isEqualTo(NotificationType.LOW_STOCK);
@@ -32,7 +32,7 @@ class NotificationTest {
     void shouldCreateQuoteNotification() {
         UUID quoteId = UUID.randomUUID();
 
-        Notification notification = Notification.createForQuote(quoteId, NotificationMessage.fromString("Orçamento #123 gerado"));
+        Notification notification = Notification.createForQuote(UUID.randomUUID(), quoteId, NotificationMessage.fromString("Orçamento #123 gerado"));
 
         assertThat(notification.getType()).isEqualTo(NotificationType.QUOTE_GENERATED);
         assertThat(notification.getQuoteId()).isEqualTo(quoteId);
@@ -43,7 +43,7 @@ class NotificationTest {
     @Test
     @DisplayName("Deve marcar notificação como lida e atualizar updatedAt")
     void shouldMarkAsRead() {
-        Notification notification = Notification.createForStock(UUID.randomUUID(), NotificationMessage.fromString("Estoque baixo"));
+        Notification notification = Notification.createForStock(UUID.randomUUID(), UUID.randomUUID(), NotificationMessage.fromString("Estoque baixo"));
         LocalDateTime initialUpdatedAt = notification.getUpdatedAt();
 
         notification.markAsRead();

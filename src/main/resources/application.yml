@@ -10,7 +10,7 @@ server:
 app:
   aws:
     sqs:
-      notification-queue: techchallenge-ofisy-notifications-queue
+      notification-queue: techchallenge-ofisy-notifications-queue.fifo
     dynamodb:
       table-name: Notifications
   jwt:

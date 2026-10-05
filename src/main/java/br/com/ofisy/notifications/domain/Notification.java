@@ -29,10 +29,10 @@ public class Notification {
         return new Builder();
     }
 
-    public static Notification createForStock(UUID stockId, NotificationMessage message) {
+    public static Notification createForStock(UUID id, UUID stockId, NotificationMessage message) {
         LocalDateTime now = LocalDateTime.now();
         return builder()
-                .id(UUID.randomUUID())
+                .id(id)
                 .type(NotificationType.LOW_STOCK)
                 .stockId(stockId)
                 .message(message)
@@ -42,10 +42,10 @@ public class Notification {
                 .build();
     }
 
-    public static Notification createForQuote(UUID quoteId, NotificationMessage message) {
+    public static Notification createForQuote(UUID id, UUID quoteId, NotificationMessage message) {
         LocalDateTime now = LocalDateTime.now();
         return builder()
-                .id(UUID.randomUUID())
+                .id(id)
                 .type(NotificationType.QUOTE_GENERATED)
                 .quoteId(quoteId)
                 .message(message)
@@ -98,11 +98,11 @@ public class Notification {
         return builder.build();
     }
 
-    public static Notification create(NotificationType type, String message, UUID referenceId) {
+    public static Notification create(UUID id, NotificationType type, String message, UUID referenceId) {
         if (type == NotificationType.LOW_STOCK) {
-            return createForStock(referenceId, NotificationMessage.fromString(message));
+            return createForStock(id, referenceId, NotificationMessage.fromString(message));
         } else {
-            return createForQuote(referenceId, NotificationMessage.fromString(message));
+            return createForQuote(id, referenceId, NotificationMessage.fromString(message));
         }
     }
 

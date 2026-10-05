@@ -22,13 +22,13 @@ public class NotificationEventListener {
         this.useCases = useCases;
     }
 
-    @SqsListener("${app.aws.sqs.notification-queue:techchallenge-ofisy-notifications-queue}")
+    @SqsListener("${app.aws.sqs.notification-queue:techchallenge-ofisy-notifications-queue.fifo}")
     public void handleNotificationEvent(EventWrapper wrapper) {
         log.info("Received event: {}", wrapper.eventType());
         try {
             switch (wrapper.eventType()) {
-                case "LOW_STOCK" -> handleLowStock(wrapper.payload());
-                case "QUOTE_GENERATED" -> handleQuoteGenerated(wrapper.payload());
+                case "LOW_STOCK" -> handleLowStock(wrapper.eventId(), wrapper.payload());
+                case "QUOTE_GENERATED" -> handleQuoteGenerated(wrapper.eventId(), wrapper.payload());
                 default -> log.warn("Unknown event type: {}", wrapper.eventType());
             }
         } catch (Exception e) {
@@ -37,7 +37,12 @@ public class NotificationEventListener {
         }
     }
 
-    private void handleLowStock(Object payload) {
+    private void handleLowStock(String eventId, Object payload) {
+        if (useCases.findById(UUID.fromString(eventId)).isPresent()) {
+            log.info("Event {} already processed, skipping", eventId);
+            return;
+        }
+
         if (payload instanceof java.util.Map<?, ?> map) {
             UUID stockId = UUID.fromString((String) map.get("stockId"));
             String productName = (String) map.get("productName");
@@ -45,28 +50,39 @@ public class NotificationEventListener {
             Integer minThreshold = (Integer) map.get("minThreshold");
 
             br.com.ofisy.notifications.domain.NotificationMessage message = br.com.ofisy.notifications.domain.NotificationMessage.forLowStock(productName, currentQuantity, minThreshold);
-            Notification notification = Notification.createForStock(stockId, message);
+            Notification notification = Notification.createForStock(UUID.fromString(eventId), stockId, message);
             
             useCases.save(notification);
             log.info("Notification saved for low stock: {}", stockId);
         }
     }
 
-    private void handleQuoteGenerated(Object payload) {
+    private void handleQuoteGenerated(String eventId, Object payload) {
+        if (useCases.findById(UUID.fromString(eventId)).isPresent()) {
+            log.info("Event {} already processed, skipping", eventId);
+            return;
+        }
+
         if (payload instanceof java.util.Map<?, ?> map) {
             UUID quoteId = UUID.fromString((String) map.get("quoteId"));
             UUID serviceOrderId = UUID.fromString((String) map.get("serviceOrderId"));
             BigDecimal totalPrice = new BigDecimal(map.get("totalPrice").toString());
 
             br.com.ofisy.notifications.domain.NotificationMessage message = br.com.ofisy.notifications.domain.NotificationMessage.forQuote(quoteId, serviceOrderId, totalPrice);
-            Notification notification = Notification.createForQuote(quoteId, message);
+            Notification notification = Notification.createForQuote(UUID.fromString(eventId), quoteId, message);
             
             useCases.save(notification);
             log.info("Notification saved for quote generated: {}", quoteId);
         }
     }
 
-    record EventWrapper(String eventType, Object payload) {}
+    record EventWrapper(
+        String eventId,
+        String eventType,
+        String serviceOrderId,
+        String occurredAt,
+        Object payload
+    ) {}
 }
 
 

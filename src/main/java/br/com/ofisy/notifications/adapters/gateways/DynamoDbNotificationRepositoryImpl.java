@@ -81,7 +81,7 @@ public class DynamoDbNotificationRepositoryImpl implements NotificationRepositor
         }
 
         Map<String, AttributeValue> finalStartKey = startKey;
-        PageIterable<DynamoDbNotificationEntity> pagedResults = typeIndex.query(r -> {
+        software.amazon.awssdk.core.pagination.sync.SdkIterable<Page<DynamoDbNotificationEntity>> pagedResults = typeIndex.query(r -> {
             r.queryConditional(conditional).scanIndexForward(false).limit(limit);
             if (filter != null) {
                 r.filterExpression(filter);
@@ -136,3 +136,4 @@ public class DynamoDbNotificationRepositoryImpl implements NotificationRepositor
         );
     }
 }
+

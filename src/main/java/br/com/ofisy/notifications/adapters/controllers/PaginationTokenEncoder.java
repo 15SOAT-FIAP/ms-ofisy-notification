@@ -1,8 +1,7 @@
 package br.com.ofisy.notifications.adapters.controllers;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.core.type.TypeReference;
+import tools.jackson.databind.ObjectMapper;
 
 import java.util.Base64;
 import java.util.Map;
@@ -15,7 +14,7 @@ public class PaginationTokenEncoder {
         try {
             String json = mapper.writeValueAsString(key);
             return Base64.getUrlEncoder().withoutPadding().encodeToString(json.getBytes());
-        } catch (JsonProcessingException e) {
+        } catch (Exception e) {
             return null;
         }
     }
