@@ -13,3 +13,6 @@ app:
       notification-queue: techchallenge-ofisy-notifications-queue.fifo
     dynamodb:
       table-name: Notifications
+  jwt:
+    secret: 1234567890123456789012345678901234567890123456789012345678901234567890
+    issuer: techchallenge-ofisy-auth
