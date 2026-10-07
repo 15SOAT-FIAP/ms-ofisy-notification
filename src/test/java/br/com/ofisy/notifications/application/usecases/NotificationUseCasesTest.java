@@ -1,7 +1,6 @@
 package br.com.ofisy.notifications.application.usecases;
 
 import br.com.ofisy.notifications.domain.Notification;
-import br.com.ofisy.notifications.domain.NotificationMessage;
 import br.com.ofisy.notifications.domain.NotificationRepository;
 import br.com.ofisy.notifications.domain.NotificationType;
 import br.com.ofisy.notifications.domain.PaginatedResult;
@@ -12,9 +11,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import java.time.LocalDateTime;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -37,6 +34,7 @@ class NotificationUseCasesTest {
     @BeforeEach
     void setUp() {
         testNotification = Notification.create(
+                UUID.randomUUID(),
                 NotificationType.LOW_STOCK,
                 "Test",
                 UUID.randomUUID()
@@ -117,6 +115,5 @@ class NotificationUseCasesTest {
         assertEquals(testNotification, result);
     }
 }
-
 
 

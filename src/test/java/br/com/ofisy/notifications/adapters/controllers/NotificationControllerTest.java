@@ -43,6 +43,7 @@ class NotificationControllerTest {
     void setUp() {
         mockMvc = MockMvcBuilders.standaloneSetup(controller).build();
         testNotification = Notification.create(
+                UUID.randomUUID(),
                 NotificationType.LOW_STOCK,
                 "Test Msg",
                 UUID.randomUUID()
@@ -119,6 +120,5 @@ class NotificationControllerTest {
                 .andExpect(jsonPath("$.items[0].id").value(testNotification.getId().toString()));
     }
 }
-
 
 
