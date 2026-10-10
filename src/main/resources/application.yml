@@ -1,0 +1,8 @@
+spring:
+  application:
+    name: ms-ofisy-notification
+  main:
+    allow-bean-definition-overriding: true
+
+server:
+  port: 8081
