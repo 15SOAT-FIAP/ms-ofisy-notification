@@ -10,9 +10,9 @@
     </parent>
 
     <groupId>br.com.ofisy</groupId>
-    <artifactId>ofisy-notifications</artifactId>
+    <artifactId>ms-ofisy-notification</artifactId>
     <version>0.0.1-SNAPSHOT</version>
-    <name>ofisy-notifications</name>
+    <name>ms-ofisy-notification</name>
     <description>Microsserviço de notificações do Ofisy (DynamoDB)</description>
 
     <properties>
