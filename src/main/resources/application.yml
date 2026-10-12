@@ -1,0 +1,18 @@
+spring:
+  application:
+    name: ms-ofisy-notification
+  cloud:
+    aws:
+      region:
+        static: us-east-1
+      credentials:
+        access-key: dummy
+        secret-key: dummy
+
+server:
+  port: 8081
+
+app:
+  aws:
+    dynamodb:
+      table-name: Notifications
