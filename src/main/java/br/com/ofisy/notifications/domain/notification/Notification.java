@@ -1,4 +1,4 @@
-package br.com.ofisy.notifications.domain;
+package br.com.ofisy.notifications.domain.notification;
 
 import java.time.LocalDateTime;
 import java.util.UUID;
@@ -177,4 +177,3 @@ public class Notification {
         }
     }
 }
-

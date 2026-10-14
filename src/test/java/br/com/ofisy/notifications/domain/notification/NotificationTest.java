@@ -1,4 +1,4 @@
-package br.com.ofisy.notifications.domain;
+package br.com.ofisy.notifications.domain.notification;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;

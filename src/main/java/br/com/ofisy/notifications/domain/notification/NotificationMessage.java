@@ -1,6 +1,6 @@
-package br.com.ofisy.notifications.domain;
+package br.com.ofisy.notifications.domain.notification;
 
-import br.com.ofisy.notifications.domain.exceptions.InvalidNotificationMessageException;
+import br.com.ofisy.notifications.domain.notification.exceptions.InvalidNotificationMessageException;
 
 import java.math.BigDecimal;
 import java.util.Locale;

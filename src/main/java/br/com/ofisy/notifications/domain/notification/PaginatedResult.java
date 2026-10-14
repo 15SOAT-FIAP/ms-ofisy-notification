@@ -1,4 +1,4 @@
-package br.com.ofisy.notifications.domain;
+package br.com.ofisy.notifications.domain.notification;
 
 import java.util.List;
 import java.util.Map;

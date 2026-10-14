@@ -1,4 +1,4 @@
-package br.com.ofisy.notifications.domain;
+package br.com.ofisy.notifications.domain.notification;
 
 import java.util.List;
 import java.util.Map;
@@ -17,4 +17,3 @@ public interface NotificationRepository {
     /** NotificaÃ§Ãµes nÃ£o lidas do tipo informado, mais recentes primeiro. */
     PaginatedResult<Notification> findUnreadByType(NotificationType type, int limit, Map<String, String> exclusiveStartKey);
 }
-
