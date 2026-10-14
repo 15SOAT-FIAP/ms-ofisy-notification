@@ -1,8 +1,8 @@
-package br.com.ofisy.notifications.adapters.gateways;
+package br.com.ofisy.notifications.adapters.gateways.notification;
 
-import br.com.ofisy.notifications.domain.Notification;
-import br.com.ofisy.notifications.domain.NotificationType;
-import br.com.ofisy.notifications.domain.PaginatedResult;
+import br.com.ofisy.notifications.domain.notification.Notification;
+import br.com.ofisy.notifications.domain.notification.NotificationType;
+import br.com.ofisy.notifications.domain.notification.PaginatedResult;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;

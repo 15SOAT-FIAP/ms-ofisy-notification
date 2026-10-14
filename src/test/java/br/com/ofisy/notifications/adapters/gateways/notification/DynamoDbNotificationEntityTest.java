@@ -1,4 +1,4 @@
-package br.com.ofisy.notifications.adapters.gateways;
+package br.com.ofisy.notifications.adapters.gateways.notification;
 
 import org.junit.jupiter.api.Test;
 import java.time.LocalDateTime;
