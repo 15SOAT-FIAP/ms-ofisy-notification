@@ -25,15 +25,22 @@ import java.util.stream.Collectors;
 @Component
 public class JwtAuthFilter extends OncePerRequestFilter {
 
-    private static final String ISSUER = "techchallenge-ofisy-auth"; // Should match the issuer of the core API
     public static final String AUTHORIZATION = "Authorization";
     public static final String BEARER = "Bearer ";
 
     private final SecretKey secretKey;
+    private final String issuer;
 
     public JwtAuthFilter(@Value("${app.jwt.secret}") String secret,
                          @Value("${app.jwt.issuer:techchallenge-ofisy-auth}") String issuer) {
+        if (secret == null || secret.isBlank()) {
+            throw new IllegalArgumentException("app.jwt.secret must be configured externally");
+        }
+        if (issuer == null || issuer.isBlank()) {
+            throw new IllegalArgumentException("app.jwt.issuer must not be blank");
+        }
         this.secretKey = Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
+        this.issuer = issuer;
     }
 
     @Override
@@ -52,7 +59,7 @@ public class JwtAuthFilter extends OncePerRequestFilter {
         try {
             Claims claims = Jwts.parser()
                     .verifyWith(secretKey)
-                    .requireIssuer("techchallenge-ofisy-api") // The original code uses "techchallenge-ofisy-api" as issuer
+                    .requireIssuer(issuer)
                     .build()
                     .parseSignedClaims(token)
                     .getPayload();
