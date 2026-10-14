@@ -14,5 +14,5 @@ app:
     dynamodb:
       table-name: Notifications
   jwt:
-    secret: 1234567890123456789012345678901234567890123456789012345678901234567890
-    issuer: techchallenge-ofisy-auth
+    secret: ${APP_JWT_SECRET}
+    issuer: ${APP_JWT_ISSUER:techchallenge-ofisy-auth}
