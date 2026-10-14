@@ -1,4 +1,4 @@
-package br.com.ofisy.notifications.adapters.gateways;
+package br.com.ofisy.notifications.adapters.gateways.notification;
 
 import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbBean;
 import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbPartitionKey;
@@ -76,4 +76,3 @@ public class DynamoDbNotificationEntity {
         this.updatedAt = updatedAt;
     }
 }
-

@@ -1,9 +1,9 @@
-package br.com.ofisy.notifications.adapters.gateways;
+package br.com.ofisy.notifications.adapters.gateways.notification;
 
-import br.com.ofisy.notifications.domain.Notification;
-import br.com.ofisy.notifications.domain.NotificationRepository;
-import br.com.ofisy.notifications.domain.NotificationType;
-import br.com.ofisy.notifications.domain.PaginatedResult;
+import br.com.ofisy.notifications.domain.notification.Notification;
+import br.com.ofisy.notifications.domain.notification.NotificationRepository;
+import br.com.ofisy.notifications.domain.notification.NotificationType;
+import br.com.ofisy.notifications.domain.notification.PaginatedResult;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Repository;
 import software.amazon.awssdk.enhanced.dynamodb.DynamoDbEnhancedClient;
@@ -38,7 +38,7 @@ public class DynamoDbNotificationRepositoryImpl implements NotificationRepositor
 
     @Override
     public Notification save(Notification notification) {
-        DynamoDbNotificationEntity entity = toEntity(notification);
+        DynamoDbNotificationEntity entity = NotificationMapper.toEntity(notification);
         table.putItem(entity);
         return notification;
     }
@@ -50,7 +50,7 @@ public class DynamoDbNotificationRepositoryImpl implements NotificationRepositor
         if (entity == null) {
             return Optional.empty();
         }
-        return Optional.of(toDomain(entity));
+        return Optional.of(NotificationMapper.toDomain(entity));
     }
 
     @Override
@@ -98,7 +98,7 @@ public class DynamoDbNotificationRepositoryImpl implements NotificationRepositor
 
         Page<DynamoDbNotificationEntity> page = iterator.next();
         List<Notification> notifications = page.items().stream()
-                .map(this::toDomain)
+                .map(NotificationMapper::toDomain)
                 .collect(Collectors.toList());
 
         Map<String, String> nextKeyMap = null;
@@ -112,28 +112,4 @@ public class DynamoDbNotificationRepositoryImpl implements NotificationRepositor
         return new PaginatedResult<>(notifications, nextKeyMap);
     }
 
-    private DynamoDbNotificationEntity toEntity(Notification notification) {
-        DynamoDbNotificationEntity entity = new DynamoDbNotificationEntity();
-        entity.setId(notification.getId().toString());
-        entity.setReferenceId(notification.getReferenceId().toString());
-        entity.setType(notification.getType().name());
-        entity.setMessage(notification.getMessage().getContent());
-        entity.setRead(notification.isRead());
-        entity.setCreatedAt(notification.getCreatedAt());
-        entity.setUpdatedAt(notification.getUpdatedAt());
-        return entity;
-    }
-
-    private Notification toDomain(DynamoDbNotificationEntity entity) {
-        return Notification.reconstruct(
-                UUID.fromString(entity.getId()),
-                NotificationType.valueOf(entity.getType()),
-                entity.getMessage(),
-                UUID.fromString(entity.getReferenceId()),
-                entity.getRead(),
-                entity.getCreatedAt(),
-                entity.getUpdatedAt()
-        );
-    }
 }
-
