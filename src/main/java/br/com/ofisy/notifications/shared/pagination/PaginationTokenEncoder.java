@@ -1,4 +1,4 @@
-package br.com.ofisy.notifications.adapters.controllers;
+package br.com.ofisy.notifications.shared.pagination;
 
 import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.ObjectMapper;

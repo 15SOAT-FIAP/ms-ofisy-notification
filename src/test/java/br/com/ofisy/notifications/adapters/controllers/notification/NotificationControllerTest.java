@@ -1,10 +1,15 @@
-package br.com.ofisy.notifications.adapters.controllers;
+package br.com.ofisy.notifications.adapters.controllers.notification;
 
-import br.com.ofisy.notifications.application.usecases.NotificationUseCases;
-import br.com.ofisy.notifications.domain.Notification;
-import br.com.ofisy.notifications.domain.NotificationMessage;
-import br.com.ofisy.notifications.domain.NotificationType;
-import br.com.ofisy.notifications.domain.PaginatedResult;
+import br.com.ofisy.notifications.application.notification.findbyid.FindNotificationByIdUseCase;
+import br.com.ofisy.notifications.application.notification.markasread.MarkNotificationAsReadUseCase;
+import br.com.ofisy.notifications.application.notification.findallstock.FindAllStockNotificationsUseCase;
+import br.com.ofisy.notifications.application.notification.findunreadstock.FindUnreadStockNotificationsUseCase;
+import br.com.ofisy.notifications.application.notification.findallserviceorder.FindAllServiceOrderNotificationsUseCase;
+import br.com.ofisy.notifications.application.notification.findunreadserviceorder.FindUnreadServiceOrderNotificationsUseCase;
+import br.com.ofisy.notifications.domain.notification.Notification;
+import br.com.ofisy.notifications.domain.notification.NotificationMessage;
+import br.com.ofisy.notifications.domain.notification.NotificationType;
+import br.com.ofisy.notifications.domain.notification.PaginatedResult;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -32,7 +37,22 @@ class NotificationControllerTest {
     private MockMvc mockMvc;
 
     @Mock
-    private NotificationUseCases useCases;
+    private FindNotificationByIdUseCase findNotificationByIdUseCase;
+
+    @Mock
+    private MarkNotificationAsReadUseCase markNotificationAsReadUseCase;
+
+    @Mock
+    private FindAllStockNotificationsUseCase findAllStockNotificationsUseCase;
+
+    @Mock
+    private FindUnreadStockNotificationsUseCase findUnreadStockNotificationsUseCase;
+
+    @Mock
+    private FindAllServiceOrderNotificationsUseCase findAllServiceOrderNotificationsUseCase;
+
+    @Mock
+    private FindUnreadServiceOrderNotificationsUseCase findUnreadServiceOrderNotificationsUseCase;
 
     @InjectMocks
     private NotificationController controller;
@@ -53,7 +73,7 @@ class NotificationControllerTest {
     @Test
     void findById_Found() throws Exception {
         UUID id = testNotification.getId();
-        when(useCases.findById(id)).thenReturn(Optional.of(testNotification));
+        when(findNotificationByIdUseCase.execute(id)).thenReturn(Optional.of(testNotification));
 
         mockMvc.perform(get("/api/v1/notifications/{id}", id))
                 .andExpect(status().isOk())
@@ -64,7 +84,7 @@ class NotificationControllerTest {
     @Test
     void findById_NotFound() throws Exception {
         UUID id = UUID.randomUUID();
-        when(useCases.findById(id)).thenReturn(Optional.empty());
+        when(findNotificationByIdUseCase.execute(id)).thenReturn(Optional.empty());
 
         mockMvc.perform(get("/api/v1/notifications/{id}", id))
                 .andExpect(status().isNotFound());
@@ -73,7 +93,7 @@ class NotificationControllerTest {
     @Test
     void markAsRead_Found() throws Exception {
         UUID id = testNotification.getId();
-        when(useCases.markAsRead(id)).thenReturn(Optional.of(testNotification));
+        when(markNotificationAsReadUseCase.execute(id)).thenReturn(Optional.of(testNotification));
 
         mockMvc.perform(patch("/api/v1/notifications/{id}/read", id))
                 .andExpect(status().isOk())
@@ -83,7 +103,7 @@ class NotificationControllerTest {
     @Test
     void findStockNotifications() throws Exception {
         PaginatedResult<Notification> result = new PaginatedResult<>(List.of(testNotification), null);
-        when(useCases.findStockNotifications(anyInt(), any())).thenReturn(result);
+        when(findAllStockNotificationsUseCase.execute(anyInt(), any())).thenReturn(result);
 
         mockMvc.perform(get("/api/v1/notifications/stock").param("limit", "10"))
                 .andExpect(status().isOk())
@@ -93,7 +113,7 @@ class NotificationControllerTest {
     @Test
     void findUnreadStockNotifications() throws Exception {
         PaginatedResult<Notification> result = new PaginatedResult<>(List.of(testNotification), null);
-        when(useCases.findUnreadStockNotifications(anyInt(), any())).thenReturn(result);
+        when(findUnreadStockNotificationsUseCase.execute(anyInt(), any())).thenReturn(result);
 
         mockMvc.perform(get("/api/v1/notifications/stock/unread"))
                 .andExpect(status().isOk())
@@ -103,7 +123,7 @@ class NotificationControllerTest {
     @Test
     void findServiceOrderNotifications() throws Exception {
         PaginatedResult<Notification> result = new PaginatedResult<>(List.of(testNotification), null);
-        when(useCases.findServiceOrderNotifications(anyInt(), any())).thenReturn(result);
+        when(findAllServiceOrderNotificationsUseCase.execute(anyInt(), any())).thenReturn(result);
 
         mockMvc.perform(get("/api/v1/notifications/service-orders"))
                 .andExpect(status().isOk())
@@ -113,13 +133,10 @@ class NotificationControllerTest {
     @Test
     void findUnreadServiceOrderNotifications() throws Exception {
         PaginatedResult<Notification> result = new PaginatedResult<>(List.of(testNotification), null);
-        when(useCases.findUnreadServiceOrderNotifications(anyInt(), any())).thenReturn(result);
+        when(findUnreadServiceOrderNotificationsUseCase.execute(anyInt(), any())).thenReturn(result);
 
         mockMvc.perform(get("/api/v1/notifications/service-orders/unread"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.items[0].id").value(testNotification.getId().toString()));
     }
 }
-
-
-

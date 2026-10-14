@@ -1,4 +1,4 @@
-package br.com.ofisy.notifications.adapters.controllers;
+package br.com.ofisy.notifications.shared.pagination;
 
 import org.junit.jupiter.api.Test;
 

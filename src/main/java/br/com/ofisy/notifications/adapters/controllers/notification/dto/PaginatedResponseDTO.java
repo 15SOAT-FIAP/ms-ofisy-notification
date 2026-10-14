@@ -1,4 +1,4 @@
-package br.com.ofisy.notifications.adapters.dto;
+package br.com.ofisy.notifications.adapters.controllers.notification.dto;
 
 import java.util.List;
 
