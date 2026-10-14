@@ -28,6 +28,9 @@ jobs:
       - name: Build & Test
         run: mvn -B verify --no-transfer-progress
 
+      - name: Test PR notification serialization
+        run: python3 -m unittest discover -s .github/tests -v
+
       - name: Upload JAR artifact
         uses: actions/upload-artifact@v4
         with:
