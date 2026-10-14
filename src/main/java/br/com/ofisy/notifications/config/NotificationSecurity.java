@@ -1,8 +1,8 @@
 package br.com.ofisy.notifications.config;
 
-import br.com.ofisy.notifications.domain.Notification;
-import br.com.ofisy.notifications.domain.NotificationRepository;
-import br.com.ofisy.notifications.domain.NotificationType;
+import br.com.ofisy.notifications.domain.notification.Notification;
+import br.com.ofisy.notifications.domain.notification.NotificationRepository;
+import br.com.ofisy.notifications.domain.notification.NotificationType;
 import org.springframework.stereotype.Component;
 
 import java.util.Optional;
