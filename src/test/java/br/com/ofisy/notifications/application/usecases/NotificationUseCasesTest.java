@@ -117,6 +117,14 @@ class NotificationUseCasesTest {
         Notification result = useCases.save(testNotification);
         assertEquals(testNotification, result);
     }
+
+    @Test
+    void createIfAbsentReturnsRepositoryDecision() {
+        when(repository.createIfAbsent(testNotification)).thenReturn(true, false);
+        assertTrue(useCases.createIfAbsent(testNotification));
+        assertFalse(useCases.createIfAbsent(testNotification));
+        verify(repository, never()).save(any());
+    }
 }
 
 

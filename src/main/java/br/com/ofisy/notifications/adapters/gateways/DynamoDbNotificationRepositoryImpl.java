@@ -12,6 +12,9 @@ import software.amazon.awssdk.enhanced.dynamodb.DynamoDbTable;
 import software.amazon.awssdk.enhanced.dynamodb.Key;
 import software.amazon.awssdk.enhanced.dynamodb.TableSchema;
 import software.amazon.awssdk.enhanced.dynamodb.model.Page;
+import software.amazon.awssdk.enhanced.dynamodb.Expression;
+import software.amazon.awssdk.enhanced.dynamodb.model.PutItemEnhancedRequest;
+import software.amazon.awssdk.services.dynamodb.model.ConditionalCheckFailedException;
 import software.amazon.awssdk.enhanced.dynamodb.model.PageIterable;
 import software.amazon.awssdk.enhanced.dynamodb.model.QueryConditional;
 import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
@@ -41,6 +44,23 @@ public class DynamoDbNotificationRepositoryImpl implements NotificationRepositor
         DynamoDbNotificationEntity entity = toEntity(notification);
         table.putItem(entity);
         return notification;
+    }
+
+    @Override
+    public boolean createIfAbsent(Notification notification) {
+        var request = PutItemEnhancedRequest.builder(DynamoDbNotificationEntity.class)
+                .item(toEntity(notification))
+                .conditionExpression(Expression.builder()
+                        .expression("attribute_not_exists(#id)")
+                        .putExpressionName("#id", "id")
+                        .build())
+                .build();
+        try {
+            table.putItem(request);
+            return true;
+        } catch (ConditionalCheckFailedException duplicate) {
+            return false;
+        }
     }
 
     @Override

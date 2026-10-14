@@ -17,6 +17,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class NotificationEventListenerTest {
@@ -39,7 +40,9 @@ class NotificationEventListenerTest {
 
         listener.handleNotificationEvent(wrapper);
 
-        verify(useCases).save(any(Notification.class));
+        verify(useCases).createIfAbsent(any(Notification.class));
+        verify(useCases, never()).save(any());
+        verify(useCases, never()).findById(any());
     }
 
     @Test
@@ -53,7 +56,7 @@ class NotificationEventListenerTest {
 
         listener.handleNotificationEvent(wrapper);
 
-        verify(useCases).save(any(Notification.class));
+        verify(useCases).createIfAbsent(any(Notification.class));
     }
 
     @Test
@@ -61,6 +64,30 @@ class NotificationEventListenerTest {
         NotificationEventListener.EventWrapper wrapper = new NotificationEventListener.EventWrapper(UUID.randomUUID().toString(), "UNKNOWN", UUID.randomUUID().toString(), "2023-01-01T00:00:00Z", new Object());
         listener.handleNotificationEvent(wrapper);
         verify(useCases, never()).save(any(Notification.class));
+        verify(useCases, never()).createIfAbsent(any());
+    }
+
+    @Test
+    void persistenceFailureIsPropagatedForRetry() {
+        var payload = Map.<String, Object>of("stockId", UUID.randomUUID().toString(),
+                "productName", "Product", "currentQuantity", 5, "minThreshold", 10);
+        var wrapper = new NotificationEventListener.EventWrapper(UUID.randomUUID().toString(),
+                "LOW_STOCK", null, "2026-01-01T00:00:00Z", payload);
+        when(useCases.createIfAbsent(any())).thenThrow(new IllegalStateException("DynamoDB unavailable"));
+        assertThrows(IllegalStateException.class, () -> listener.handleNotificationEvent(wrapper));
+    }
+
+    @Test
+    void duplicateEventDoesNotUpdateExistingNotification() {
+        var payload = Map.<String, Object>of("quoteId", UUID.randomUUID().toString(),
+                "serviceOrderId", UUID.randomUUID().toString(), "totalPrice", "10.00");
+        var wrapper = new NotificationEventListener.EventWrapper(UUID.randomUUID().toString(),
+                "QUOTE_GENERATED", null, "2026-01-01T00:00:00Z", payload);
+        when(useCases.createIfAbsent(any())).thenReturn(false);
+        listener.handleNotificationEvent(wrapper);
+        verify(useCases).createIfAbsent(any());
+        verify(useCases, never()).save(any());
+        verify(useCases, never()).findById(any());
     }
 
     

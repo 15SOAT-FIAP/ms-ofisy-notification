@@ -49,4 +49,8 @@ public class NotificationUseCases {
     public Notification save(Notification notification) {
         return repository.save(notification);
     }
+
+    public boolean createIfAbsent(Notification notification) {
+        return repository.createIfAbsent(notification);
+    }
 }
