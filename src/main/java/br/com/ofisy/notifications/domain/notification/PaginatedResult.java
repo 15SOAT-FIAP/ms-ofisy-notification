@@ -1,22 +1,21 @@
 package br.com.ofisy.notifications.domain.notification;
 
 import java.util.List;
-import java.util.Map;
 
 public class PaginatedResult<T> {
     private final List<T> items;
-    private final Map<String, String> lastEvaluatedKey;
+    private final String nextCursor;
 
-    public PaginatedResult(List<T> items, Map<String, String> lastEvaluatedKey) {
+    public PaginatedResult(List<T> items, String cursor) {
         this.items = items;
-        this.lastEvaluatedKey = lastEvaluatedKey;
+        this.nextCursor = cursor;
     }
 
     public List<T> getItems() {
         return items;
     }
 
-    public Map<String, String> getLastEvaluatedKey() {
-        return lastEvaluatedKey;
+    public String getNextCursor() {
+        return nextCursor;
     }
 }
