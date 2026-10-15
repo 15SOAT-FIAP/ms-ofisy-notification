@@ -13,7 +13,6 @@ import br.com.ofisy.notifications.application.notification.findunreadstock.FindU
 import br.com.ofisy.notifications.application.notification.findallserviceorder.FindAllServiceOrderNotificationsUseCase;
 import br.com.ofisy.notifications.application.notification.findunreadserviceorder.FindUnreadServiceOrderNotificationsUseCase;
 import br.com.ofisy.notifications.adapters.presenters.notification.NotificationPresenter;
-import br.com.ofisy.notifications.shared.pagination.PaginationTokenEncoder;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.prepost.PreAuthorize;
 @RestController
@@ -49,19 +48,19 @@ public class NotificationController implements NotificationApi {
     @Override
     @PreAuthorize("hasAnyRole('ADMIN','STOCKMAN')")
     public ResponseEntity<PaginatedResponseDTO<NotificationResponseDTO>> findAllStock(int limit,String nextToken) {
-        return ResponseEntity.ok(NotificationPresenter.presentPage(findAllStockNotificationsUseCase.execute(limit, PaginationTokenEncoder.decode(nextToken))));
+        return ResponseEntity.ok(NotificationPresenter.presentPage(findAllStockNotificationsUseCase.execute(limit, nextToken)));
     }
     @Override
     @PreAuthorize("hasAnyRole('ADMIN','STOCKMAN')")
     public ResponseEntity<PaginatedResponseDTO<NotificationResponseDTO>> findUnreadStock(int limit,String nextToken) {
-        return ResponseEntity.ok(NotificationPresenter.presentPage(findUnreadStockNotificationsUseCase.execute(limit, PaginationTokenEncoder.decode(nextToken))));
+        return ResponseEntity.ok(NotificationPresenter.presentPage(findUnreadStockNotificationsUseCase.execute(limit, nextToken)));
     }
     @Override
     public ResponseEntity<PaginatedResponseDTO<NotificationResponseDTO>> findAllServiceOrders(int limit,String nextToken) {
-        return ResponseEntity.ok(NotificationPresenter.presentPage(findAllServiceOrderNotificationsUseCase.execute(limit, PaginationTokenEncoder.decode(nextToken))));
+        return ResponseEntity.ok(NotificationPresenter.presentPage(findAllServiceOrderNotificationsUseCase.execute(limit, nextToken)));
     }
     @Override
     public ResponseEntity<PaginatedResponseDTO<NotificationResponseDTO>> findUnreadServiceOrders(int limit,String nextToken) {
-        return ResponseEntity.ok(NotificationPresenter.presentPage(findUnreadServiceOrderNotificationsUseCase.execute(limit, PaginationTokenEncoder.decode(nextToken))));
+        return ResponseEntity.ok(NotificationPresenter.presentPage(findUnreadServiceOrderNotificationsUseCase.execute(limit, nextToken)));
     }
 }

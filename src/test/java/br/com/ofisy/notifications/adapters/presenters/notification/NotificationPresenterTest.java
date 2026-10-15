@@ -3,10 +3,8 @@ package br.com.ofisy.notifications.adapters.presenters.notification;
 import br.com.ofisy.notifications.domain.notification.Notification;
 import br.com.ofisy.notifications.domain.notification.NotificationType;
 import br.com.ofisy.notifications.domain.notification.PaginatedResult;
-import br.com.ofisy.notifications.shared.pagination.PaginationTokenEncoder;
 import org.junit.jupiter.api.Test;
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -16,8 +14,8 @@ class NotificationPresenterTest {
         var notification = Notification.create(UUID.randomUUID(), NotificationType.QUOTE_GENERATED,
                 "Orçamento gerado", UUID.randomUUID());
         notification.markAsRead();
-        var key = Map.of("id", notification.getId().toString(), "type", "QUOTE_GENERATED");
-        var response = NotificationPresenter.presentPage(new PaginatedResult<>(List.of(notification), key));
+        var cursor = "opaque-continuation-token";
+        var response = NotificationPresenter.presentPage(new PaginatedResult<>(List.of(notification), cursor));
         var item = response.getItems().getFirst();
         assertThat(item.id()).isEqualTo(notification.getId());
         assertThat(item.referenceId()).isEqualTo(notification.getQuoteId());
@@ -26,7 +24,7 @@ class NotificationPresenterTest {
         assertThat(item.read()).isTrue();
         assertThat(item.createdAt()).isEqualTo(notification.getCreatedAt());
         assertThat(item.updatedAt()).isEqualTo(notification.getUpdatedAt());
-        assertThat(PaginationTokenEncoder.decode(response.getNextToken())).isEqualTo(key);
+        assertThat(response.getNextToken()).isEqualTo(cursor);
         assertThat(NotificationPresenter.presentPage(new PaginatedResult<>(List.of(), null)).getNextToken()).isNull();
     }
 }

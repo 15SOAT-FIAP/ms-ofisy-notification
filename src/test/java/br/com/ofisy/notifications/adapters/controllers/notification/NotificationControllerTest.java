@@ -23,11 +23,12 @@ class NotificationControllerTest {
     void listRoutesKeepTypeAndCursorContract(String route,NotificationType type,boolean unread) throws Exception {
         var repository=mock(NotificationRepository.class);
         var mvc=MockMvcBuilders.standaloneSetup(new NotificationController(new FindStockNotificationByIdService(repository), new FindServiceOrderNotificationByIdService(repository), new MarkStockNotificationAsReadService(repository), new MarkServiceOrderNotificationAsReadService(repository), new FindAllStockNotificationsService(repository), new FindUnreadStockNotificationsService(repository), new FindAllServiceOrderNotificationsService(repository), new FindUnreadServiceOrderNotificationsService(repository))).setControllerAdvice(new NotificationExceptionHandler()).build();
-        var page=new PaginatedResult<Notification>(List.of(),null);
-        if(unread) when(repository.findUnreadByType(eq(type),eq(10),isNull())).thenReturn(page);
-        else when(repository.findAllByType(eq(type),eq(10),isNull())).thenReturn(page);
-        mvc.perform(get("/api/v1/notifications/"+route).param("limit","10"))
-            .andExpect(status().isOk()).andExpect(jsonPath("$.items").isArray()).andExpect(jsonPath("$.nextToken").isEmpty());
+        var cursor="opaque-input-token";
+        var page=new PaginatedResult<Notification>(List.of(),"opaque-next-token");
+        if(unread) when(repository.findUnreadByType(eq(type),eq(10),eq(cursor))).thenReturn(page);
+        else when(repository.findAllByType(eq(type),eq(10),eq(cursor))).thenReturn(page);
+        mvc.perform(get("/api/v1/notifications/"+route).param("limit","10").param("nextToken",cursor))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.items").isArray()).andExpect(jsonPath("$.nextToken").value("opaque-next-token"));
     }
     @ParameterizedTest
     @CsvSource({"stock,LOW_STOCK","service-orders,QUOTE_GENERATED"})

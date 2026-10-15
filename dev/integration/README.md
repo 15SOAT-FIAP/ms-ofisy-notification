@@ -35,3 +35,7 @@ DYNAMODB_TEST_ENDPOINT=http://localhost:18000 mvn clean verify
 
 O endpoint é apenas para testes: as tabelas temporárias são criadas e removidas pelos testes.
 Não aponte essa variável para um ambiente de produção.
+
+O smoke também percorre todas as páginas das quatro listagens HTTP com `limit=1`,
+validando os tokens reais, ausência de itens perdidos/duplicados e o fim da paginação.
+A suíte Java inclui `DynamoDbPaginationIntegrationTest` para páginas filtradas vazias com continuação.

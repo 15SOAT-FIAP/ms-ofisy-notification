@@ -4,7 +4,7 @@ import java.util.List;
 
 public class PaginatedResponseDTO<T> {
     private List<T> items;
-    private String nextToken; // Base64 encoded JSON of lastEvaluatedKey, or just query params
+    private String nextToken; // Opaque continuation token supplied by the persistence adapter
 
     public PaginatedResponseDTO() {}
 

@@ -7,6 +7,7 @@ import os
 import time
 import urllib.error
 import urllib.request
+import urllib.parse
 import uuid
 import boto3
 from botocore.config import Config
@@ -117,11 +118,44 @@ def main():
     for category in ("stock", "service-orders"):
         assert request("/" + category + "/" + missing, jwt=admin)[0] == 404
         assert request("/" + category + "/" + missing + "/read", method="PATCH", jwt=admin)[0] == 404
+    # Traverse all four HTTP list routes with real continuation tokens.
+    expected_ids = {"stock": {event_id}, "service-orders": {quote["eventId"]}}
+    read_ids = {"stock": {event_id}, "service-orders": {quote["eventId"]}}
+    for category, template in (("stock", event), ("service-orders", quote)):
+        for i in range(3):
+            body = {**template, "eventId": str(uuid.uuid4())}
+            expected_ids[category].add(body["eventId"])
+            send(body)
+            if i == 1:
+                read_ids[category].add(body["eventId"])
+        eventually(lambda: expected_ids[category].issubset({n["id"] for n in request("/" + category, jwt=admin)[1]["items"]}),
+                   "pagination dataset consumed: " + category)
+        for notification_id in read_ids[category]:
+            assert request("/" + category + "/" + notification_id + "/read", method="PATCH", jwt=admin)[0] == 200
+        eventually(lambda: not any(n["id"] in read_ids[category] for n in request("/" + category + "/unread", jwt=admin)[1]["items"]),
+                   "unread index converged: " + category)
+        for unread in (False, True):
+            route = "/" + category + ("/unread" if unread else "")
+            cursor = None
+            seen = []
+            for _ in range(12):
+                query = "?limit=1" + ("&nextToken=" + urllib.parse.quote(cursor, safe="") if cursor else "")
+                status, page = request(route + query, jwt=admin)
+                assert status == 200
+                seen.extend(n["id"] for n in page["items"])
+                cursor = page["nextToken"]
+                if cursor is None:
+                    break
+            else:
+                raise AssertionError("Pagination did not terminate: " + route)
+            wanted = expected_ids[category] - read_ids[category] if unread else expected_ids[category]
+            assert len(seen) == len(set(seen)) and set(seen) == wanted, (route, seen, wanted)
+
     print(json.dumps({"status": "PASS", "checks": ["JWT issuer", "JWT signature", "anonymous stock denied",
         "LOW_STOCK consumption", "PATCH read", "redelivery preserves read and updatedAt", "DynamoDB persistence",
         "TypeIndex listing", "QUOTE_GENERATED consumption", "core message and DTO fields", "wrong-type GET/PATCH 404 both directions",
         "wrong-type PATCH preserves state", "missing-id GET/PATCH 404 both categories", "core public quote read route",
-        "quote redelivery preserves read and updatedAt", "both unread lists reflect read state"], "stockNotificationId": event_id,
+        "quote redelivery preserves read and updatedAt", "both unread lists reflect read state", "all four HTTP routes paginate without missing or duplicate records"], "stockNotificationId": event_id,
         "quoteNotificationId": quote["eventId"]}, indent=2), flush=True)
 
 
