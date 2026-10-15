@@ -1,142 +1,52 @@
 package br.com.ofisy.notifications.adapters.controllers.notification;
-
-import br.com.ofisy.notifications.application.notification.findbyid.FindNotificationByIdUseCase;
-import br.com.ofisy.notifications.application.notification.markasread.MarkNotificationAsReadUseCase;
-import br.com.ofisy.notifications.application.notification.findallstock.FindAllStockNotificationsUseCase;
-import br.com.ofisy.notifications.application.notification.findunreadstock.FindUnreadStockNotificationsUseCase;
-import br.com.ofisy.notifications.application.notification.findallserviceorder.FindAllServiceOrderNotificationsUseCase;
-import br.com.ofisy.notifications.application.notification.findunreadserviceorder.FindUnreadServiceOrderNotificationsUseCase;
-import br.com.ofisy.notifications.domain.notification.Notification;
-import br.com.ofisy.notifications.domain.notification.NotificationMessage;
-import br.com.ofisy.notifications.domain.notification.NotificationType;
-import br.com.ofisy.notifications.domain.notification.PaginatedResult;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
-import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.test.web.servlet.MockMvc;
+import br.com.ofisy.notifications.application.notification.findstockbyid.FindStockNotificationByIdService;
+import br.com.ofisy.notifications.application.notification.findserviceorderbyid.FindServiceOrderNotificationByIdService;
+import br.com.ofisy.notifications.application.notification.markstockasread.MarkStockNotificationAsReadService;
+import br.com.ofisy.notifications.application.notification.markserviceorderasread.MarkServiceOrderNotificationAsReadService;
+import br.com.ofisy.notifications.application.notification.findallstock.FindAllStockNotificationsService;
+import br.com.ofisy.notifications.application.notification.findunreadstock.FindUnreadStockNotificationsService;
+import br.com.ofisy.notifications.application.notification.findallserviceorder.FindAllServiceOrderNotificationsService;
+import br.com.ofisy.notifications.application.notification.findunreadserviceorder.FindUnreadServiceOrderNotificationsService;
+import br.com.ofisy.notifications.config.NotificationExceptionHandler;
+import br.com.ofisy.notifications.domain.notification.*;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
+import java.util.*;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
-
-import java.util.List;
-import java.util.Optional;
-import java.util.UUID;
-
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyInt;
-import static org.mockito.Mockito.when;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
-
-@ExtendWith(MockitoExtension.class)
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
+import static org.mockito.Mockito.*;
+import static org.assertj.core.api.Assertions.*;
 class NotificationControllerTest {
-
-    private MockMvc mockMvc;
-
-    @Mock
-    private FindNotificationByIdUseCase findNotificationByIdUseCase;
-
-    @Mock
-    private MarkNotificationAsReadUseCase markNotificationAsReadUseCase;
-
-    @Mock
-    private FindAllStockNotificationsUseCase findAllStockNotificationsUseCase;
-
-    @Mock
-    private FindUnreadStockNotificationsUseCase findUnreadStockNotificationsUseCase;
-
-    @Mock
-    private FindAllServiceOrderNotificationsUseCase findAllServiceOrderNotificationsUseCase;
-
-    @Mock
-    private FindUnreadServiceOrderNotificationsUseCase findUnreadServiceOrderNotificationsUseCase;
-
-    @InjectMocks
-    private NotificationController controller;
-
-    private Notification testNotification;
-
-    @BeforeEach
-    void setUp() {
-        mockMvc = MockMvcBuilders.standaloneSetup(controller).build();
-        testNotification = Notification.create(
-                UUID.randomUUID(),
-                NotificationType.LOW_STOCK,
-                "Test Msg",
-                UUID.randomUUID()
-        );
+    @ParameterizedTest
+    @CsvSource({"stock,LOW_STOCK,false","stock/unread,LOW_STOCK,true","service-orders,QUOTE_GENERATED,false","service-orders/unread,QUOTE_GENERATED,true"})
+    void listRoutesKeepTypeAndCursorContract(String route,NotificationType type,boolean unread) throws Exception {
+        var repository=mock(NotificationRepository.class);
+        var mvc=MockMvcBuilders.standaloneSetup(new NotificationController(new FindStockNotificationByIdService(repository), new FindServiceOrderNotificationByIdService(repository), new MarkStockNotificationAsReadService(repository), new MarkServiceOrderNotificationAsReadService(repository), new FindAllStockNotificationsService(repository), new FindUnreadStockNotificationsService(repository), new FindAllServiceOrderNotificationsService(repository), new FindUnreadServiceOrderNotificationsService(repository))).setControllerAdvice(new NotificationExceptionHandler()).build();
+        var page=new PaginatedResult<Notification>(List.of(),null);
+        if(unread) when(repository.findUnreadByType(eq(type),eq(10),isNull())).thenReturn(page);
+        else when(repository.findAllByType(eq(type),eq(10),isNull())).thenReturn(page);
+        mvc.perform(get("/api/v1/notifications/"+route).param("limit","10"))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.items").isArray()).andExpect(jsonPath("$.nextToken").isEmpty());
     }
-
-    @Test
-    void findById_Found() throws Exception {
-        UUID id = testNotification.getId();
-        when(findNotificationByIdUseCase.execute(id)).thenReturn(Optional.of(testNotification));
-
-        mockMvc.perform(get("/api/v1/notifications/{id}", id))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.id").value(id.toString()))
-                .andExpect(jsonPath("$.type").value("LOW_STOCK"));
-    }
-
-    @Test
-    void findById_NotFound() throws Exception {
-        UUID id = UUID.randomUUID();
-        when(findNotificationByIdUseCase.execute(id)).thenReturn(Optional.empty());
-
-        mockMvc.perform(get("/api/v1/notifications/{id}", id))
-                .andExpect(status().isNotFound());
-    }
-
-    @Test
-    void markAsRead_Found() throws Exception {
-        UUID id = testNotification.getId();
-        when(markNotificationAsReadUseCase.execute(id)).thenReturn(Optional.of(testNotification));
-
-        mockMvc.perform(patch("/api/v1/notifications/{id}/read", id))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.id").value(id.toString()));
-    }
-
-    @Test
-    void findStockNotifications() throws Exception {
-        PaginatedResult<Notification> result = new PaginatedResult<>(List.of(testNotification), null);
-        when(findAllStockNotificationsUseCase.execute(anyInt(), any())).thenReturn(result);
-
-        mockMvc.perform(get("/api/v1/notifications/stock").param("limit", "10"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.items[0].id").value(testNotification.getId().toString()));
-    }
-
-    @Test
-    void findUnreadStockNotifications() throws Exception {
-        PaginatedResult<Notification> result = new PaginatedResult<>(List.of(testNotification), null);
-        when(findUnreadStockNotificationsUseCase.execute(anyInt(), any())).thenReturn(result);
-
-        mockMvc.perform(get("/api/v1/notifications/stock/unread"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.items[0].id").value(testNotification.getId().toString()));
-    }
-
-    @Test
-    void findServiceOrderNotifications() throws Exception {
-        PaginatedResult<Notification> result = new PaginatedResult<>(List.of(testNotification), null);
-        when(findAllServiceOrderNotificationsUseCase.execute(anyInt(), any())).thenReturn(result);
-
-        mockMvc.perform(get("/api/v1/notifications/service-orders"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.items[0].id").value(testNotification.getId().toString()));
-    }
-
-    @Test
-    void findUnreadServiceOrderNotifications() throws Exception {
-        PaginatedResult<Notification> result = new PaginatedResult<>(List.of(testNotification), null);
-        when(findUnreadServiceOrderNotificationsUseCase.execute(anyInt(), any())).thenReturn(result);
-
-        mockMvc.perform(get("/api/v1/notifications/service-orders/unread"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.items[0].id").value(testNotification.getId().toString()));
+    @ParameterizedTest
+    @CsvSource({"stock,LOW_STOCK","service-orders,QUOTE_GENERATED"})
+    void correctTypeSucceedsAndWrongOrMissingTypeReturnsIdentical404WithoutUpdating(String route,NotificationType type) throws Exception {
+        var repository=mock(NotificationRepository.class);
+        var mvc=MockMvcBuilders.standaloneSetup(new NotificationController(new FindStockNotificationByIdService(repository), new FindServiceOrderNotificationByIdService(repository), new MarkStockNotificationAsReadService(repository), new MarkServiceOrderNotificationAsReadService(repository), new FindAllStockNotificationsService(repository), new FindUnreadStockNotificationsService(repository), new FindAllServiceOrderNotificationsService(repository), new FindUnreadServiceOrderNotificationsService(repository))).setControllerAdvice(new NotificationExceptionHandler()).build();
+        var id=UUID.randomUUID();var n=Notification.create(id,type,"Mensagem",UUID.randomUUID());
+        when(repository.findById(id)).thenReturn(Optional.of(n));when(repository.save(n)).thenReturn(n);
+        var path="/api/v1/notifications/"+route+"/"+id;
+        mvc.perform(get(path)).andExpect(status().isOk()).andExpect(jsonPath(type==NotificationType.LOW_STOCK?"$.stockId":"$.quoteId").value(n.getReferenceId().toString()));
+        mvc.perform(patch(path+"/read")).andExpect(status().isOk()).andExpect(jsonPath("$.read").value(true));
+        clearInvocations(repository);
+        var wrong=Notification.create(id,type==NotificationType.LOW_STOCK?NotificationType.QUOTE_GENERATED:NotificationType.LOW_STOCK,"Mensagem",UUID.randomUUID());
+        when(repository.findById(id)).thenReturn(Optional.of(wrong));
+        mvc.perform(get(path)).andExpect(status().isNotFound()).andExpect(jsonPath("$.title").value("Notificação não encontrada"));
+        mvc.perform(patch(path+"/read")).andExpect(status().isNotFound());
+        assertThat(wrong.isRead()).isFalse();verify(repository,never()).save(any());
+        when(repository.findById(id)).thenReturn(Optional.empty());
+        mvc.perform(get(path)).andExpect(status().isNotFound()).andExpect(jsonPath("$.detail").value("Notificação não encontrada: "+id));
+        mvc.perform(patch(path+"/read")).andExpect(status().isNotFound());
     }
 }

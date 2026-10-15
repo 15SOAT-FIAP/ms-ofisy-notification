@@ -1,12 +1,13 @@
 package br.com.ofisy.notifications.adapters.controllers.notification;
 
-import br.com.ofisy.notifications.application.notification.findallserviceorder.FindAllServiceOrderNotificationsService;
+import br.com.ofisy.notifications.application.notification.findstockbyid.FindStockNotificationByIdService;
+import br.com.ofisy.notifications.application.notification.findserviceorderbyid.FindServiceOrderNotificationByIdService;
+import br.com.ofisy.notifications.application.notification.markstockasread.MarkStockNotificationAsReadService;
+import br.com.ofisy.notifications.application.notification.markserviceorderasread.MarkServiceOrderNotificationAsReadService;
 import br.com.ofisy.notifications.application.notification.findallstock.FindAllStockNotificationsService;
-import br.com.ofisy.notifications.application.notification.findbyid.FindNotificationByIdService;
-import br.com.ofisy.notifications.application.notification.findunreadserviceorder.FindUnreadServiceOrderNotificationsService;
 import br.com.ofisy.notifications.application.notification.findunreadstock.FindUnreadStockNotificationsService;
-import br.com.ofisy.notifications.application.notification.markasread.MarkNotificationAsReadService;
-import br.com.ofisy.notifications.config.NotificationSecurity;
+import br.com.ofisy.notifications.application.notification.findallserviceorder.FindAllServiceOrderNotificationsService;
+import br.com.ofisy.notifications.application.notification.findunreadserviceorder.FindUnreadServiceOrderNotificationsService;
 import br.com.ofisy.notifications.config.SecurityConfig;
 import br.com.ofisy.notifications.domain.notification.Notification;
 import br.com.ofisy.notifications.domain.notification.NotificationRepository;
@@ -45,7 +46,7 @@ class NotificationWebSecurityContextTest {
         var notification = Notification.create(UUID.randomUUID(), NotificationType.LOW_STOCK, "Estoque baixo", UUID.randomUUID());
         when(repository.findById(notification.getId())).thenReturn(Optional.of(notification));
         var mvc = MockMvcBuilders.webAppContextSetup(context).apply(springSecurity()).build();
-        var path = "/api/v1/notifications/" + notification.getId();
+        var path = "/api/v1/notifications/stock/" + notification.getId();
         mvc.perform(get(path).with(user("admin").roles("ADMIN"))).andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(notification.getId().toString()));
         mvc.perform(get(path).with(user("user").roles("USER"))).andExpect(status().isForbidden());
@@ -53,10 +54,7 @@ class NotificationWebSecurityContextTest {
 
     @Configuration
     @EnableWebMvc
-    @Import({NotificationController.class, SecurityConfig.class, NotificationSecurity.class, JwtAuthFilter.class,
-            FindNotificationByIdService.class, MarkNotificationAsReadService.class,
-            FindAllStockNotificationsService.class, FindUnreadStockNotificationsService.class,
-            FindAllServiceOrderNotificationsService.class, FindUnreadServiceOrderNotificationsService.class})
+    @Import({NotificationController.class, SecurityConfig.class, JwtAuthFilter.class, FindStockNotificationByIdService.class, FindServiceOrderNotificationByIdService.class, MarkStockNotificationAsReadService.class, MarkServiceOrderNotificationAsReadService.class, FindAllStockNotificationsService.class, FindUnreadStockNotificationsService.class, FindAllServiceOrderNotificationsService.class, FindUnreadServiceOrderNotificationsService.class})
     static class TestConfiguration {
         @Bean
         NotificationRepository repository() {

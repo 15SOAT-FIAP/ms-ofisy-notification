@@ -1,16 +1,19 @@
 package br.com.ofisy.notifications.adapters.controllers.notification;
 
 import br.com.ofisy.notifications.adapters.gateways.notification.DynamoDbNotificationRepositoryImpl;
-import br.com.ofisy.notifications.application.notification.create.CreateNotificationService;
-import br.com.ofisy.notifications.application.notification.create.CreateNotificationUseCase;
-import br.com.ofisy.notifications.application.notification.findallserviceorder.FindAllServiceOrderNotificationsService;
+import br.com.ofisy.notifications.application.notification.findstockbyid.FindStockNotificationByIdService;
+import br.com.ofisy.notifications.application.notification.findserviceorderbyid.FindServiceOrderNotificationByIdService;
+import br.com.ofisy.notifications.application.notification.markstockasread.MarkStockNotificationAsReadService;
+import br.com.ofisy.notifications.application.notification.markserviceorderasread.MarkServiceOrderNotificationAsReadService;
 import br.com.ofisy.notifications.application.notification.findallstock.FindAllStockNotificationsService;
-import br.com.ofisy.notifications.application.notification.findbyid.FindNotificationByIdService;
-import br.com.ofisy.notifications.application.notification.findunreadserviceorder.FindUnreadServiceOrderNotificationsService;
 import br.com.ofisy.notifications.application.notification.findunreadstock.FindUnreadStockNotificationsService;
-import br.com.ofisy.notifications.application.notification.markasread.MarkNotificationAsReadService;
+import br.com.ofisy.notifications.application.notification.findallserviceorder.FindAllServiceOrderNotificationsService;
+import br.com.ofisy.notifications.application.notification.findunreadserviceorder.FindUnreadServiceOrderNotificationsService;
+import br.com.ofisy.notifications.application.notification.createlowstock.CreateLowStockNotificationService;
+import br.com.ofisy.notifications.application.notification.createlowstock.CreateLowStockNotificationUseCase;
+import br.com.ofisy.notifications.application.notification.createlowstock.CreateLowStockNotificationUseCase.CreateLowStockCommand;
+import br.com.ofisy.notifications.config.NotificationExceptionHandler;
 import br.com.ofisy.notifications.config.DynamoDbConfig;
-import br.com.ofisy.notifications.config.NotificationSecurity;
 import br.com.ofisy.notifications.config.SecurityConfig;
 import br.com.ofisy.notifications.domain.notification.Notification;
 import br.com.ofisy.notifications.domain.notification.NotificationRepository;
@@ -52,7 +55,7 @@ class NotificationArchitectureIntegrationTest {
     private static final String SECRET = "architecture-test-secret-with-at-least-32-bytes";
     private static final String TABLE = "ArchitectureTest-" + UUID.randomUUID();
     @Autowired private WebApplicationContext context;
-    @Autowired private CreateNotificationUseCase createNotification;
+    @Autowired private CreateLowStockNotificationUseCase createNotification;
     @Autowired private NotificationRepository repository;
     @Autowired private DynamoDbClient client;
 
@@ -66,8 +69,9 @@ class NotificationArchitectureIntegrationTest {
         var mvc = MockMvcBuilders.webAppContextSetup(context).apply(springSecurity()).build();
         var notification = Notification.create(UUID.randomUUID(), NotificationType.LOW_STOCK,
                 "Estoque baixo", UUID.randomUUID());
-        assertThat(createNotification.execute(notification)).isTrue();
-        String path = "/api/v1/notifications/" + notification.getId();
+        var command=new CreateLowStockCommand(notification.getStockId(),"Radiador",2,10);
+        assertThat(createNotification.executeEvent(notification.getId(),command)).isTrue();
+        String path = "/api/v1/notifications/stock/" + notification.getId();
         mvc.perform(get(path)).andExpect(result -> assertThat(result.getResponse().getStatus()).isIn(401, 403));
         mvc.perform(get(path).header("Authorization", "Bearer " + token("wrong-issuer"))).andExpect(status().isUnauthorized());
         String authorization = "Bearer " + token("architecture-test");
@@ -77,10 +81,18 @@ class NotificationArchitectureIntegrationTest {
         mvc.perform(patch(path + "/read").header("Authorization", authorization)).andExpect(status().isOk())
                 .andExpect(jsonPath("$.read").value(true));
         var read = repository.findById(notification.getId()).orElseThrow();
-        assertThat(createNotification.execute(notification)).isFalse();
+        assertThat(createNotification.executeEvent(notification.getId(),command)).isFalse();
         var stored = repository.findById(notification.getId()).orElseThrow();
         assertThat(stored.isRead()).isTrue();
         assertThat(stored.getUpdatedAt()).isEqualTo(read.getUpdatedAt());
+        String wrong="/api/v1/notifications/service-orders/"+notification.getId();
+        mvc.perform(get(wrong)).andExpect(status().isNotFound());
+        mvc.perform(patch(wrong+"/read")).andExpect(status().isNotFound());
+        var quote=Notification.create(UUID.randomUUID(),NotificationType.QUOTE_GENERATED,"Orçamento",UUID.randomUUID());
+        repository.save(quote);
+        mvc.perform(get("/api/v1/notifications/stock/"+quote.getId()).header("Authorization",authorization)).andExpect(status().isNotFound());
+        mvc.perform(patch("/api/v1/notifications/stock/"+quote.getId()+"/read").header("Authorization",authorization)).andExpect(status().isNotFound());
+        assertThat(repository.findById(quote.getId()).orElseThrow().isRead()).isFalse();
         mvc.perform(get("/api/v1/notifications/stock").param("limit", "10").header("Authorization", authorization))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.items[0].id").value(notification.getId().toString()));
     }
@@ -93,10 +105,7 @@ class NotificationArchitectureIntegrationTest {
 
     @Configuration
     @EnableWebMvc
-    @Import({NotificationController.class, SecurityConfig.class, NotificationSecurity.class, JwtAuthFilter.class,
-            CreateNotificationService.class, FindNotificationByIdService.class, MarkNotificationAsReadService.class,
-            FindAllStockNotificationsService.class, FindUnreadStockNotificationsService.class,
-            FindAllServiceOrderNotificationsService.class, FindUnreadServiceOrderNotificationsService.class})
+    @Import({NotificationController.class, SecurityConfig.class, JwtAuthFilter.class, NotificationExceptionHandler.class, CreateLowStockNotificationService.class, FindStockNotificationByIdService.class, FindServiceOrderNotificationByIdService.class, MarkStockNotificationAsReadService.class, MarkServiceOrderNotificationAsReadService.class, FindAllStockNotificationsService.class, FindUnreadStockNotificationsService.class, FindAllServiceOrderNotificationsService.class, FindUnreadServiceOrderNotificationsService.class})
     static class TestConfiguration {
         @Bean(destroyMethod = "close")
         DynamoDbClient client() {
