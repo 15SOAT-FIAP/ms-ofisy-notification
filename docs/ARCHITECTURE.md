@@ -28,3 +28,14 @@ Mantemos a adaptação de listagens por cursor para DynamoDB, com `items` e `nex
 A resposta restaura os campos `stockId` e `quoteId` do core; `referenceId` permanece como alias aditivo da migração.
 DynamoDB substitui JPA conforme ADR-0013; portanto não copiamos entidades JPA, Flyway ou transações relacionais.
 A criação por evento usa operação condicional; atualização de leitura é uma operação distinta.
+
+
+## Paginação e categorias
+
+A porta e os casos de listagem recebem um cursor opaco (`String`), e `PaginatedResult`
+devolve `nextCursor`. Domínio e aplicação apenas repassam esse valor, sem interpretar
+chaves, atributos, JSON ou Base64. O adapter de persistência interpreta o cursor e converte
+as chaves DynamoDB. Na API, `items` e `nextToken` permanecem com o mesmo contrato.
+As fábricas genéricas de criação e reconstrução tratam cada `NotificationType` com switch
+expression exaustiva, sem fallback para orçamento, e rejeitam tipo nulo explicitamente.
+As regras para os tipos válidos, referências, mensagens, leitura e datas são preservadas.
