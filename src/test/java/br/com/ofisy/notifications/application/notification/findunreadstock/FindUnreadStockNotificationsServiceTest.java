@@ -20,7 +20,7 @@ class FindUnreadStockNotificationsServiceTest {
 
     @Test
     void forwardsTypeLimitAndCursorAndReturnsPageUnchanged() {
-        var cursor = Map.of("id", "last-id", "createdAt", "2026-01-01T00:00:00");
+        var cursor = "opaque-continuation-token";
         var page = new PaginatedResult<Notification>(List.of(notification), cursor);
         when(repository.findUnreadByType(NotificationType.LOW_STOCK, 17, cursor)).thenReturn(page);
         assertThat(service.execute(17, cursor)).isSameAs(page);

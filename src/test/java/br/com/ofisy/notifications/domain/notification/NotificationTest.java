@@ -7,6 +7,7 @@ import java.time.LocalDateTime;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatNullPointerException;
 
 class NotificationTest {
 
@@ -173,4 +174,19 @@ class NotificationTest {
         assertThat(notification.getCreatedAt()).isEqualTo(createdAt);
         assertThat(notification.getUpdatedAt()).isEqualTo(updatedAt);
     }
+    @Test
+    void shouldRejectNullTypeWhenCreating() {
+        assertThatNullPointerException().isThrownBy(() ->
+                Notification.create(UUID.randomUUID(), null, "Estoque baixo", UUID.randomUUID()))
+                .withMessage("Notification type is required");
+    }
+
+    @Test
+    void shouldRejectNullTypeWhenReconstructing() {
+        var now = LocalDateTime.now();
+        assertThatNullPointerException().isThrownBy(() ->
+                Notification.reconstruct(UUID.randomUUID(), null, "Estoque baixo", UUID.randomUUID(), false, now, now))
+                .withMessage("Notification type is required");
+    }
+
 }
