@@ -25,6 +25,21 @@ public class Notification {
         this.updatedAt = builder.updatedAt;
     }
 
+
+    public static Notification createForStock(UUID stockId, String message) {
+        return createForStock(stockId, NotificationMessage.fromString(message));
+    }
+    public static Notification createForStock(UUID stockId, NotificationMessage message) {
+        return createForStock(UUID.randomUUID(), stockId, message);
+    }
+
+    public static Notification createForQuote(UUID quoteId, String message) {
+        return createForQuote(quoteId, NotificationMessage.fromString(message));
+    }
+    public static Notification createForQuote(UUID quoteId, NotificationMessage message) {
+        return createForQuote(UUID.randomUUID(), quoteId, message);
+    }
+
     public static Builder builder() {
         return new Builder();
     }
