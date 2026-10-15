@@ -16,7 +16,15 @@ As interfaces de aplicação não dependem de adapters; os services podem usar `
 
 ## Adaptações do microsserviço
 
-Preservamos os contratos atuais: paginação por cursor, `referenceId` na resposta e rotas por id unificadas.
-Esses contratos não são idênticos aos endpoints/listas do monólito e não foram alterados nesta refatoração.
+Consultas e marcação de leitura usam os casos de uso específicos de estoque e ordem de serviço do core.
+ID ausente e ID de outro tipo geram a mesma `NotificationNotFoundException`, sem alterar leitura ou datas.
+As rotas por id são `/stock/{id}` e `/service-orders/{id}`, com os respectivos PATCHs `/read`.
+Tipo, referências e mensagem são definidos pelas fábricas e value objects do domínio, orquestrados pelos casos de criação.
+O listener traduz o envelope SQS para commands e não constrói entidades nem escolhe `NotificationType`.
+
+As interfaces de criação preservam `execute(command)` do core. A extensão separada `executeEvent(eventId, command)`
+usa o identificador do evento para a inserção condicional; uma duplicata não atualiza um registro existente.
+Mantemos a adaptação de listagens por cursor para DynamoDB, com `items` e `nextToken`, em vez de listas sem paginação.
+A resposta restaura os campos `stockId` e `quoteId` do core; `referenceId` permanece como alias aditivo da migração.
 DynamoDB substitui JPA conforme ADR-0013; portanto não copiamos entidades JPA, Flyway ou transações relacionais.
 A criação por evento usa operação condicional; atualização de leitura é uma operação distinta.
