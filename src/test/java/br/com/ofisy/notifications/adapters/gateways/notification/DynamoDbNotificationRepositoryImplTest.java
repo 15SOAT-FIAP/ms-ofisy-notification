@@ -100,7 +100,7 @@ class DynamoDbNotificationRepositoryImplTest {
 
         assertThat(result.getItems()).hasSize(1);
         assertThat(result.getItems().get(0).getStockId()).isEqualTo(UUID.fromString(entity.getReferenceId()));
-        assertThat(result.getLastEvaluatedKey()).containsEntry("id", entity.getId());
+        assertThat(DynamoDbPaginationCursor.decode(result.getNextCursor())).containsEntry("id", entity.getId());
         assertThat(lastRequest.get().limit()).isEqualTo(10);
         assertThat(lastRequest.get().scanIndexForward()).isFalse();
         assertThat(lastRequest.get().filterExpression()).isNull();
@@ -112,10 +112,10 @@ class DynamoDbNotificationRepositoryImplTest {
         stubQuery(List.of(Page.create(List.of(), Collections.emptyMap())));
 
         PaginatedResult<Notification> result = repository.findUnreadByType(
-                NotificationType.QUOTE_GENERATED, 5, Map.of("id", "abc"));
+                NotificationType.QUOTE_GENERATED, 5, DynamoDbPaginationCursor.encode(Map.of("id", "abc")));
 
         assertThat(result.getItems()).isEmpty();
-        assertThat(result.getLastEvaluatedKey()).isNull();
+        assertThat(result.getNextCursor()).isNull();
         assertThat(lastRequest.get().filterExpression().expression()).isEqualTo("#r = :readVal");
         assertThat(lastRequest.get().exclusiveStartKey()).containsEntry("id", AttributeValue.builder().s("abc").build());
     }
@@ -124,10 +124,10 @@ class DynamoDbNotificationRepositoryImplTest {
     void findAllByType_shouldReturnEmptyWhenNoPages() {
         stubQuery(List.of());
 
-        PaginatedResult<Notification> result = repository.findAllByType(NotificationType.LOW_STOCK, 10, Map.of());
+        PaginatedResult<Notification> result = repository.findAllByType(NotificationType.LOW_STOCK, 10, "");
 
         assertThat(result.getItems()).isEmpty();
-        assertThat(result.getLastEvaluatedKey()).isNull();
+        assertThat(result.getNextCursor()).isNull();
     }
 
     @SuppressWarnings("unchecked")
