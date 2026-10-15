@@ -2,6 +2,7 @@ package br.com.ofisy.notifications.domain.notification;
 
 import java.time.LocalDateTime;
 import java.util.UUID;
+import java.util.Objects;
 
 public class Notification {
 
@@ -104,21 +105,17 @@ public class Notification {
                 .createdAt(createdAt)
                 .updatedAt(updatedAt);
 
-        if (type == NotificationType.LOW_STOCK) {
-            builder.stockId(referenceId);
-        } else {
-            builder.quoteId(referenceId);
-        }
-
-        return builder.build();
+        return switch (Objects.requireNonNull(type, "Notification type is required")) {
+            case LOW_STOCK -> builder.stockId(referenceId).build();
+            case QUOTE_GENERATED -> builder.quoteId(referenceId).build();
+        };
     }
 
     public static Notification create(UUID id, NotificationType type, String message, UUID referenceId) {
-        if (type == NotificationType.LOW_STOCK) {
-            return createForStock(id, referenceId, NotificationMessage.fromString(message));
-        } else {
-            return createForQuote(id, referenceId, NotificationMessage.fromString(message));
-        }
+        return switch (Objects.requireNonNull(type, "Notification type is required")) {
+            case LOW_STOCK -> createForStock(id, referenceId, NotificationMessage.fromString(message));
+            case QUOTE_GENERATED -> createForQuote(id, referenceId, NotificationMessage.fromString(message));
+        };
     }
 
     public NotificationMessage getMessage() {
