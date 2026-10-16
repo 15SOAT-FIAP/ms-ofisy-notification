@@ -1,0 +1,52 @@
+name: ofisy-notification-test
+services:
+  dynamodb:
+    image: amazon/dynamodb-local:3.3.1
+    command: ["-jar", "DynamoDBLocal.jar", "-inMemory", "-sharedDb"]
+    ports: ["127.0.0.1:18000:8000"]
+  sqs:
+    image: softwaremill/elasticmq-native:1.7.1
+    ports: ["127.0.0.1:19324:9324"]
+    volumes:
+      - ./elasticmq.conf:/opt/elasticmq.conf:ro
+  bootstrap:
+    build:
+      context: .
+      dockerfile: Dockerfile.tools
+    command: ["python", "/tools/bootstrap.py"]
+    environment: &aws
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+      AWS_DEFAULT_REGION: us-east-1
+      AWS_EC2_METADATA_DISABLED: "true"
+    depends_on: [dynamodb, sqs]
+  app:
+    build: ../..
+    ports: ["127.0.0.1:18081:8081"]
+    environment:
+      SPRING_PROFILES_ACTIVE: local
+      SPRING_CLOUD_AWS_DYNAMODB_ENDPOINT: http://dynamodb:8000
+      SPRING_CLOUD_AWS_SQS_ENDPOINT: http://sqs:9324
+      SPRING_CLOUD_AWS_REGION_STATIC: us-east-1
+      SPRING_CLOUD_AWS_CREDENTIALS_ACCESS_KEY: test
+      SPRING_CLOUD_AWS_CREDENTIALS_SECRET_KEY: test
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+      AWS_REGION: us-east-1
+      AWS_EC2_METADATA_DISABLED: "true"
+      APP_JWT_SECRET: ${APP_JWT_SECRET:?Run iniciar-ambiente.ps1 to generate a local secret}
+      APP_JWT_ISSUER: ofisy-local-test
+    depends_on:
+      bootstrap:
+        condition: service_completed_successfully
+  smoke:
+    build:
+      context: .
+      dockerfile: Dockerfile.tools
+    command: ["python", "/tools/smoke.py"]
+    environment:
+      <<: *aws
+      APP_JWT_SECRET: ${APP_JWT_SECRET:?Local secret required}
+      APP_JWT_ISSUER: ofisy-local-test
+    profiles: [test]
+    depends_on: [app]
