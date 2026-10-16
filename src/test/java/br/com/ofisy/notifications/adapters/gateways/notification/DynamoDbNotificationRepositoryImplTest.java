@@ -6,6 +6,7 @@ import br.com.ofisy.notifications.domain.notification.PaginatedResult;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import software.amazon.awssdk.enhanced.dynamodb.model.PutItemEnhancedRequest;
 import software.amazon.awssdk.core.pagination.sync.SdkIterable;
 import software.amazon.awssdk.enhanced.dynamodb.DynamoDbEnhancedClient;
 import software.amazon.awssdk.enhanced.dynamodb.DynamoDbIndex;
@@ -15,6 +16,8 @@ import software.amazon.awssdk.enhanced.dynamodb.TableSchema;
 import software.amazon.awssdk.enhanced.dynamodb.model.Page;
 import software.amazon.awssdk.enhanced.dynamodb.model.QueryEnhancedRequest;
 import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
+import software.amazon.awssdk.services.dynamodb.model.ConditionalCheckFailedException;
+import software.amazon.awssdk.services.dynamodb.model.DynamoDbException;
 
 import java.time.LocalDateTime;
 import java.util.Collections;
@@ -26,6 +29,8 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
@@ -69,6 +74,38 @@ class DynamoDbNotificationRepositoryImplTest {
         assertThat(entity.getType()).isEqualTo("LOW_STOCK");
         assertThat(entity.getMessage()).isEqualTo("Estoque baixo");
         assertThat(entity.getRead()).isFalse();
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void createIfAbsentUsesAtomicCondition() {
+        var notification = Notification.create(UUID.randomUUID(), NotificationType.LOW_STOCK,
+                "Estoque baixo", UUID.randomUUID());
+        assertThat(repository.createIfAbsent(notification)).isTrue();
+        ArgumentCaptor<PutItemEnhancedRequest<DynamoDbNotificationEntity>> captor =
+                ArgumentCaptor.forClass(PutItemEnhancedRequest.class);
+        verify(table).putItem(captor.capture());
+        assertThat(captor.getValue().conditionExpression().expression()).isEqualTo("attribute_not_exists(#id)");
+        assertThat(captor.getValue().conditionExpression().expressionNames()).containsEntry("#id", "id");
+        assertThat(captor.getValue().item().getId()).isEqualTo(notification.getId().toString());
+    }
+
+    @Test
+    void duplicateInsertIsSuccessfulNoOp() {
+        doThrow(ConditionalCheckFailedException.builder().message("exists").build())
+                .when(table).putItem(any(PutItemEnhancedRequest.class));
+        var notification = Notification.create(UUID.randomUUID(), NotificationType.LOW_STOCK,
+                "Estoque baixo", UUID.randomUUID());
+        assertThat(repository.createIfAbsent(notification)).isFalse();
+    }
+
+    @Test
+    void infrastructureFailureIsNotTreatedAsDuplicate() {
+        doThrow(DynamoDbException.builder().message("unavailable").build())
+                .when(table).putItem(any(PutItemEnhancedRequest.class));
+        var notification = Notification.create(UUID.randomUUID(), NotificationType.LOW_STOCK,
+                "Estoque baixo", UUID.randomUUID());
+        assertThatThrownBy(() -> repository.createIfAbsent(notification)).isInstanceOf(DynamoDbException.class);
     }
 
     @Test
