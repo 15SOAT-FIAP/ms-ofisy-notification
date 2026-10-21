@@ -1,14 +1,17 @@
 name: ofisy-notification-test
 services:
-  dynamodb:
-    image: amazon/dynamodb-local:3.3.1
-    command: ["-jar", "DynamoDBLocal.jar", "-inMemory", "-sharedDb"]
-    ports: ["127.0.0.1:18000:8000"]
-  sqs:
-    image: softwaremill/elasticmq-native:1.7.1
-    ports: ["127.0.0.1:19324:9324"]
-    volumes:
-      - ./elasticmq.conf:/opt/elasticmq.conf:ro
+  localstack:
+    image: localstack/localstack:4.9.0
+    ports: ["127.0.0.1:14566:4566"]
+    environment:
+      SERVICES: sns,sqs,dynamodb
+      AWS_DEFAULT_REGION: us-east-1
+      SQS_ENDPOINT_STRATEGY: path
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4566/_localstack/health"]
+      interval: 3s
+      timeout: 3s
+      retries: 40
   bootstrap:
     build:
       context: .
@@ -19,14 +22,16 @@ services:
       AWS_SECRET_ACCESS_KEY: test
       AWS_DEFAULT_REGION: us-east-1
       AWS_EC2_METADATA_DISABLED: "true"
-    depends_on: [dynamodb, sqs]
+    depends_on:
+      localstack:
+        condition: service_healthy
   app:
     build: ../..
     ports: ["127.0.0.1:18081:8081"]
     environment:
       SPRING_PROFILES_ACTIVE: local
-      SPRING_CLOUD_AWS_DYNAMODB_ENDPOINT: http://dynamodb:8000
-      SPRING_CLOUD_AWS_SQS_ENDPOINT: http://sqs:9324
+      SPRING_CLOUD_AWS_DYNAMODB_ENDPOINT: http://localstack:4566
+      SPRING_CLOUD_AWS_SQS_ENDPOINT: http://localstack:4566
       SPRING_CLOUD_AWS_REGION_STATIC: us-east-1
       SPRING_CLOUD_AWS_CREDENTIALS_ACCESS_KEY: test
       SPRING_CLOUD_AWS_CREDENTIALS_SECRET_KEY: test
@@ -34,7 +39,7 @@ services:
       AWS_SECRET_ACCESS_KEY: test
       AWS_REGION: us-east-1
       AWS_EC2_METADATA_DISABLED: "true"
-      APP_JWT_SECRET: ${APP_JWT_SECRET:?Run iniciar-ambiente.ps1 to generate a local secret}
+      APP_JWT_SECRET: ${APP_JWT_SECRET:?Set a random local test secret}
       APP_JWT_ISSUER: ofisy-local-test
     depends_on:
       bootstrap:

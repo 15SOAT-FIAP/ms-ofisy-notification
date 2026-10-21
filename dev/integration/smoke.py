@@ -1,4 +1,4 @@
-"""End-to-end SQS -> application -> DynamoDB -> secured REST API."""
+"""End-to-end SNS -> filtered SQS FIFO -> application -> DynamoDB -> secured REST API."""
 import base64
 import hashlib
 import hmac
@@ -57,15 +57,19 @@ def main():
     assert request("/stock", jwt=token(issuer="wrong-issuer"))[0] == 401
     assert request("/stock", jwt=token(secret="another-local-secret-with-at-least-32-bytes"))[0] == 401
     config = Config(connect_timeout=3, read_timeout=5, retries={"max_attempts": 1})
-    sqs = boto3.client("sqs", endpoint_url="http://sqs:9324", config=config)
-    ddb = boto3.client("dynamodb", endpoint_url="http://dynamodb:8000", config=config)
-    queue = sqs.get_queue_url(QueueName="techchallenge-ofisy-notifications-queue.fifo")["QueueUrl"]
+    sqs = boto3.client("sqs", endpoint_url="http://localstack:4566", config=config)
+    ddb = boto3.client("dynamodb", endpoint_url="http://localstack:4566", config=config)
+    queue = sqs.get_queue_url(QueueName="ofisy-notification.fifo")["QueueUrl"]
+    sns = boto3.client("sns", endpoint_url="http://localstack:4566", config=config)
+    topic_arns = {topic["TopicArn"].split(":")[-1]: topic["TopicArn"] for topic in sns.list_topics()["Topics"]}
     event_id = str(uuid.uuid4())
-    event = {"eventId": event_id, "eventType": "LOW_STOCK", "occurredAt": "2026-10-13T00:00:00Z",
+    event = {"eventId": event_id, "type": "LOW_STOCK", "occurredAt": "2026-10-13T00:00:00Z",
              "payload": {"stockId": str(uuid.uuid4()), "productName": "Radiador smoke test", "currentQuantity": 2, "minThreshold": 10}}
 
     def send(body):
-        sqs.send_message(QueueUrl=queue, MessageBody=json.dumps(body), MessageGroupId="smoke",
+        sns.publish(TopicArn=topic_arns["ofisy-stock.fifo" if body["type"] == "LOW_STOCK" else "ofisy-billing.fifo"],
+                    Message=json.dumps(body), MessageGroupId=body.get("serviceOrderId") or body["payload"]["stockId"],
+                    MessageAttributes={"type": {"DataType": "String", "StringValue": body["type"]}},
                          MessageDeduplicationId=str(uuid.uuid4()))
 
     send(event)
@@ -93,8 +97,9 @@ def main():
     assert item["read"]["BOOL"] is True
     stock = request("/stock?limit=10", jwt=admin)[1]
     assert any(n["id"] == event_id for n in stock["items"])
-    quote = {"eventId": str(uuid.uuid4()), "eventType": "QUOTE_GENERATED", "occurredAt": event["occurredAt"],
+    quote = {"eventId": str(uuid.uuid4()), "type": "QUOTE_GENERATED", "occurredAt": event["occurredAt"],
              "payload": {"quoteId": str(uuid.uuid4()), "serviceOrderId": str(uuid.uuid4()), "totalPrice": "123.45"}}
+    quote["serviceOrderId"] = quote["payload"]["serviceOrderId"]
     send(quote)
     eventually(lambda: any(n["id"] == quote["eventId"] for n in request("/service-orders")[1]["items"]), "QUOTE_GENERATED public listing")
     quote_path = "/service-orders/" + quote["eventId"]
@@ -107,6 +112,7 @@ def main():
     assert request(quote_path)[1]["updatedAt"] == quote_record["updatedAt"]
     quote_status, quote_marked = request(quote_path + "/read", method="PATCH")
     assert quote_status == 200 and quote_marked["read"] is True
+    quote["serviceOrderId"] = quote["payload"]["serviceOrderId"]
     send(quote)
     time.sleep(2)
     eventually(queue_drained, "quote redelivery acknowledged")
@@ -151,7 +157,37 @@ def main():
             wanted = expected_ids[category] - read_ids[category] if unread else expected_ids[category]
             assert len(seen) == len(set(seen)) and set(seen) == wanted, (route, seen, wanted)
 
-    print(json.dumps({"status": "PASS", "checks": ["JWT issuer", "JWT signature", "anonymous stock denied",
+    # An unhandled type published to SNS must be filtered before reaching the application.
+    ignored = {**event, "eventId": str(uuid.uuid4()), "type": "UNSUBSCRIBED"}
+    sns.publish(TopicArn=topic_arns["ofisy-stock.fifo"], Message=json.dumps(ignored),
+                MessageGroupId=ignored["payload"]["stockId"], MessageDeduplicationId=ignored["eventId"],
+                MessageAttributes={"type": {"DataType": "String", "StringValue": ignored["type"]}})
+    time.sleep(2)
+    assert "Item" not in ddb.get_item(TableName="Notifications", Key={"id": {"S": ignored["eventId"]}})
+    assert queue_drained()
+
+    # Invalid recognized payload must fail and reach DLQ; another group continues.
+    invalid = {**event, "eventId": str(uuid.uuid4()), "payload": {**event["payload"], "stockId": str(uuid.uuid4())}}
+    del invalid["payload"]["currentQuantity"]
+    send(invalid)
+    healthy = {**event, "eventId": str(uuid.uuid4()), "payload": {**event["payload"], "stockId": str(uuid.uuid4())}}
+    send(healthy)
+    eventually(lambda: request("/stock/" + healthy["eventId"], jwt=admin)[0] == 200, "independent FIFO group")
+
+    dlq = sqs.get_queue_url(QueueName="ofisy-notification-dlq.fifo")["QueueUrl"]
+    def receive_failed():
+        messages = sqs.receive_message(QueueUrl=dlq, MaxNumberOfMessages=1, WaitTimeSeconds=1).get("Messages", [])
+        return messages[0] if messages else None
+
+    failed = eventually(receive_failed, "invalid payload retried and moved to DLQ")
+    assert json.loads(failed["Body"])["eventId"] == invalid["eventId"]
+    assert request("/stock/" + invalid["eventId"], jwt=admin)[0] == 404
+    repaired = json.loads(failed["Body"])
+    repaired["payload"]["currentQuantity"] = 2
+    send(repaired)
+    eventually(lambda: request("/stock/" + repaired["eventId"], jwt=admin)[0] == 200, "manual DLQ repair and replay")
+    sqs.delete_message(QueueUrl=dlq, ReceiptHandle=failed["ReceiptHandle"])
+    print(json.dumps({"status": "PASS", "checks": ["SNS FIFO to SQS FIFO with raw envelope", "SNS type filter", "invalid payload retry and DLQ", "independent group progress", "manual DLQ repair and replay", "JWT issuer", "JWT signature", "anonymous stock denied",
         "LOW_STOCK consumption", "PATCH read", "redelivery preserves read and updatedAt", "DynamoDB persistence",
         "TypeIndex listing", "QUOTE_GENERATED consumption", "core message and DTO fields", "wrong-type GET/PATCH 404 both directions",
         "wrong-type PATCH preserves state", "missing-id GET/PATCH 404 both categories", "core public quote read route",
