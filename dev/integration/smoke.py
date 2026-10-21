@@ -156,12 +156,15 @@ def main():
             wanted = expected_ids[category] - read_ids[category] if unread else expected_ids[category]
             assert len(seen) == len(set(seen)) and set(seen) == wanted, (route, seen, wanted)
 
-    # An unhandled type published to SNS must be filtered before reaching the application.
+    # A valid payload with an unsubscribed routing attribute must be filtered by SNS.
     ignored = {**event, "eventId": str(uuid.uuid4())}
     sns.publish(TopicArn=topic_arns["ofisy-stock.fifo"], Message=json.dumps(ignored),
                 MessageGroupId=ignored["payload"]["stockId"], MessageDeduplicationId=ignored["eventId"],
                 MessageAttributes={"type": {"DataType": "String", "StringValue": "UNSUBSCRIBED"}})
-    time.sleep(2)
+    control = {**event, "eventId": str(uuid.uuid4())}
+    send(control)
+    eventually(lambda: request("/stock/" + control["eventId"], jwt=admin)[0] == 200, "SNS filter positive control")
+    eventually(queue_drained, "SNS filter queue drained")
     assert "Item" not in ddb.get_item(TableName="Notifications", Key={"id": {"S": ignored["eventId"]}})
     assert queue_drained()
 
