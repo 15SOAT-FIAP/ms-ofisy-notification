@@ -63,7 +63,7 @@ def main():
     sns = boto3.client("sns", endpoint_url="http://localstack:4566", config=config)
     topic_arns = {topic["TopicArn"].split(":")[-1]: topic["TopicArn"] for topic in sns.list_topics()["Topics"]}
     event_id = str(uuid.uuid4())
-    event = {"eventId": event_id, "type": "LOW_STOCK", "occurredAt": "2026-10-13T00:00:00Z",
+    event = {"eventId": event_id, "type": "LOW_STOCK", "serviceOrderId": None, "occurredAt": "2026-10-13T00:00:00Z",
              "payload": {"stockId": str(uuid.uuid4()), "productName": "Radiador smoke test", "currentQuantity": 2, "minThreshold": 10}}
 
     def send(body):
@@ -112,7 +112,6 @@ def main():
     assert request(quote_path)[1]["updatedAt"] == quote_record["updatedAt"]
     quote_status, quote_marked = request(quote_path + "/read", method="PATCH")
     assert quote_status == 200 and quote_marked["read"] is True
-    quote["serviceOrderId"] = quote["payload"]["serviceOrderId"]
     send(quote)
     time.sleep(2)
     eventually(queue_drained, "quote redelivery acknowledged")
@@ -158,10 +157,10 @@ def main():
             assert len(seen) == len(set(seen)) and set(seen) == wanted, (route, seen, wanted)
 
     # An unhandled type published to SNS must be filtered before reaching the application.
-    ignored = {**event, "eventId": str(uuid.uuid4()), "type": "UNSUBSCRIBED"}
+    ignored = {**event, "eventId": str(uuid.uuid4())}
     sns.publish(TopicArn=topic_arns["ofisy-stock.fifo"], Message=json.dumps(ignored),
                 MessageGroupId=ignored["payload"]["stockId"], MessageDeduplicationId=ignored["eventId"],
-                MessageAttributes={"type": {"DataType": "String", "StringValue": ignored["type"]}})
+                MessageAttributes={"type": {"DataType": "String", "StringValue": "UNSUBSCRIBED"}})
     time.sleep(2)
     assert "Item" not in ddb.get_item(TableName="Notifications", Key={"id": {"S": ignored["eventId"]}})
     assert queue_drained()
