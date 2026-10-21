@@ -1,44 +1,58 @@
 package br.com.ofisy.notifications.adapters.listeners.notification;
+
+import br.com.ofisy.notifications.adapters.listeners.dto.EventEnvelope;
+import br.com.ofisy.notifications.adapters.listeners.dto.LowStockPayload;
+import br.com.ofisy.notifications.adapters.listeners.dto.QuoteGeneratedPayload;
 import br.com.ofisy.notifications.application.notification.createlowstock.CreateLowStockNotificationUseCase;
 import br.com.ofisy.notifications.application.notification.createlowstock.CreateLowStockNotificationUseCase.CreateLowStockCommand;
 import br.com.ofisy.notifications.application.notification.createquote.CreateQuoteNotificationUseCase;
 import br.com.ofisy.notifications.application.notification.createquote.CreateQuoteNotificationUseCase.CreateQuoteCommand;
 import io.awspring.cloud.sqs.annotation.SqsListener;
-import org.springframework.stereotype.Component;
+import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import java.math.BigDecimal;
-import java.util.Map;
-import java.util.UUID;
+import org.springframework.stereotype.Component;
+import tools.jackson.databind.json.JsonMapper;
 
-/** Translates transport payloads only. Type, message and entity creation belong to application/domain. */
+/** Translates transport payloads. Business rules remain in application/domain. */
 @Component
 public class NotificationEventListener {
+    private static final Logger LOGGER = LoggerFactory.getLogger(NotificationEventListener.class);
     private final CreateLowStockNotificationUseCase lowStock;
     private final CreateQuoteNotificationUseCase quote;
-    public NotificationEventListener(CreateLowStockNotificationUseCase lowStock, CreateQuoteNotificationUseCase quote) {
-        this.lowStock=lowStock;this.quote=quote;
+    private final JsonMapper jsonMapper;
+
+    public NotificationEventListener(CreateLowStockNotificationUseCase lowStock,
+                                     CreateQuoteNotificationUseCase quote, JsonMapper jsonMapper) {
+        this.lowStock = lowStock;
+        this.quote = quote;
+        this.jsonMapper = jsonMapper;
     }
-    @SqsListener("${app.aws.sqs.notification-queue:techchallenge-ofisy-notifications-queue.fifo}")
-    public void handleNotificationEvent(EventWrapper event) {
-        switch(event.eventType()) {
+
+    @SqsListener("${app.aws.sqs.notification-queue:ofisy-notification.fifo}")
+    public void handleNotificationEvent(EventEnvelope event) {
+        switch (event.type()) {
             case "LOW_STOCK" -> {
-                var p=payload(event.payload());
-                lowStock.executeEvent(UUID.fromString(event.eventId()),new CreateLowStockCommand(
-                        UUID.fromString((String)p.get("stockId")),(String)p.get("productName"),
-                        ((Number)p.get("currentQuantity")).intValue(),((Number)p.get("minThreshold")).intValue()));
+                requireObjectPayload(event);
+                var payload = jsonMapper.treeToValue(event.payload(), LowStockPayload.class);
+                lowStock.executeEvent(event.eventId(), new CreateLowStockCommand(
+                        payload.stockId(), payload.productName(), payload.currentQuantity(), payload.minThreshold()));
             }
             case "QUOTE_GENERATED" -> {
-                var p=payload(event.payload());
-                quote.executeEvent(UUID.fromString(event.eventId()),new CreateQuoteCommand(
-                        UUID.fromString((String)p.get("quoteId")),UUID.fromString((String)p.get("serviceOrderId")),
-                        new BigDecimal(p.get("totalPrice").toString())));
+                requireObjectPayload(event);
+                var payload = jsonMapper.treeToValue(event.payload(), QuoteGeneratedPayload.class);
+                if (!payload.serviceOrderId().equals(event.serviceOrderId())) {
+                    throw new IllegalArgumentException("Envelope and payload serviceOrderId must match");
+                }
+                quote.executeEvent(event.eventId(), new CreateQuoteCommand(
+                        payload.quoteId(), payload.serviceOrderId(), payload.totalPrice()));
             }
-            default -> LoggerFactory.getLogger(getClass()).warn("Unknown event type: {}",event.eventType());
+            default -> LOGGER.warn("Ignoring event {} of unknown type {}", event.eventId(), event.type());
         }
     }
-    private Map<?,?> payload(Object value) {
-        if(value instanceof Map<?,?> map) return map;
-        throw new IllegalArgumentException("Notification payload must be an object");
+
+    private void requireObjectPayload(EventEnvelope event) {
+        if (!event.payload().isObject()) {
+            throw new IllegalArgumentException("Notification payload must be an object");
+        }
     }
-    public record EventWrapper(String eventId,String eventType,String serviceOrderId,String occurredAt,Object payload) {}
 }

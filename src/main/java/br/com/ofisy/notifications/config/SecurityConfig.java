@@ -31,8 +31,6 @@ public class SecurityConfig {
                 .httpBasic(AbstractHttpConfigurer::disable)
                 .formLogin(AbstractHttpConfigurer::disable)
                 .authorizeHttpRequests(auth -> auth
-                        // Permitting the public service-orders endpoint 
-                        // Wait, they asked for "leaving /service-orders public". Let's allow GET /api/v1/notifications/service-orders/**
                         .requestMatchers("/api/v1/notifications/service-orders").permitAll()
                         .requestMatchers("/api/v1/notifications/service-orders/**").permitAll()
                         .requestMatchers("/actuator/**").permitAll() // If actuator is added later
