@@ -3,6 +3,7 @@ package br.com.ofisy.notifications.adapters.gateways.notification;
 import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbBean;
 import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbPartitionKey;
 import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbSecondaryPartitionKey;
+import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbSecondarySortKey;
 
 import java.time.LocalDateTime;
 
@@ -34,7 +35,7 @@ public class DynamoDbNotificationEntity {
         this.referenceId = referenceId;
     }
 
-    @software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbSecondaryPartitionKey(indexNames = {"TypeIndex"})
+    @DynamoDbSecondaryPartitionKey(indexNames = {"TypeIndex"})
     public String getType() {
         return type;
     }
@@ -59,7 +60,7 @@ public class DynamoDbNotificationEntity {
         this.read = read;
     }
 
-    @software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbSecondarySortKey(indexNames = {"TypeIndex"})
+    @DynamoDbSecondarySortKey(indexNames = {"TypeIndex"})
     public LocalDateTime getCreatedAt() {
         return createdAt;
     }
