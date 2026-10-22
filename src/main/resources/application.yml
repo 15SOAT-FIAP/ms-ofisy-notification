@@ -9,5 +9,7 @@ server:
 
 app:
   aws:
+    sqs:
+      notification-queue: ofisy-notification.fifo
     dynamodb:
       table-name: Notifications

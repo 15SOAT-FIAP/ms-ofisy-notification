@@ -7,6 +7,9 @@ public interface CreateLowStockNotificationUseCase {
 
     Notification execute(CreateLowStockCommand command);
 
+    /** Event-consumption extension: eventId is the atomic deduplication key. */
+    boolean executeEvent(UUID eventId, CreateLowStockCommand command);
+
     record CreateLowStockCommand(
             UUID stockId,
             String productName,
