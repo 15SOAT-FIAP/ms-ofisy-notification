@@ -6,6 +6,7 @@ import br.com.ofisy.notifications.domain.notification.NotificationType;
 import br.com.ofisy.notifications.domain.notification.PaginatedResult;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Repository;
+import software.amazon.awssdk.core.pagination.sync.SdkIterable;
 import software.amazon.awssdk.enhanced.dynamodb.DynamoDbEnhancedClient;
 import software.amazon.awssdk.enhanced.dynamodb.DynamoDbIndex;
 import software.amazon.awssdk.enhanced.dynamodb.DynamoDbTable;
@@ -81,7 +82,7 @@ public class DynamoDbNotificationRepositoryImpl implements NotificationRepositor
     @Override
     public PaginatedResult<Notification> findUnreadByType(NotificationType type, int limit, String cursor) {
         QueryConditional queryConditional = QueryConditional.keyEqualTo(Key.builder().partitionValue(type.name()).build());
-        software.amazon.awssdk.enhanced.dynamodb.Expression filterExpression = software.amazon.awssdk.enhanced.dynamodb.Expression.builder()
+        Expression filterExpression = Expression.builder()
                 .expression("#r = :readVal")
                 .putExpressionName("#r", "read")
                 .putExpressionValue(":readVal", AttributeValue.builder().bool(false).build())
@@ -90,7 +91,7 @@ public class DynamoDbNotificationRepositoryImpl implements NotificationRepositor
         return executeQuery(queryConditional, filterExpression, limit, cursor);
     }
 
-    private PaginatedResult<Notification> executeQuery(QueryConditional conditional, software.amazon.awssdk.enhanced.dynamodb.Expression filter, int limit, String cursor) {
+    private PaginatedResult<Notification> executeQuery(QueryConditional conditional, Expression filter, int limit, String cursor) {
         Map<String, String> startKeyMap = DynamoDbPaginationCursor.decode(cursor);
         Map<String, AttributeValue> startKey = null;
         if (startKeyMap != null && !startKeyMap.isEmpty()) {
@@ -101,7 +102,7 @@ public class DynamoDbNotificationRepositoryImpl implements NotificationRepositor
         }
 
         Map<String, AttributeValue> finalStartKey = startKey;
-        software.amazon.awssdk.core.pagination.sync.SdkIterable<Page<DynamoDbNotificationEntity>> pagedResults = typeIndex.query(r -> {
+        SdkIterable<Page<DynamoDbNotificationEntity>> pagedResults = typeIndex.query(r -> {
             r.queryConditional(conditional).scanIndexForward(false).limit(limit);
             if (filter != null) {
                 r.filterExpression(filter);
