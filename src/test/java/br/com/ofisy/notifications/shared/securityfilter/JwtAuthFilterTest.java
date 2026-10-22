@@ -15,6 +15,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 
 import java.io.PrintWriter;
 import java.util.Date;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -51,7 +52,7 @@ class JwtAuthFilterTest {
 
         validToken = Jwts.builder()
                 .subject("123")
-                .claim("roles", java.util.List.of("ROLE_USER"))
+                .claim("roles", List.of("ROLE_USER"))
                 .issuer(ISSUER)
                 .expiration(new Date(System.currentTimeMillis() + 100000))
                 .signWith(Keys.hmacShaKeyFor(SECRET.getBytes(StandardCharsets.UTF_8)))
@@ -66,7 +67,7 @@ class JwtAuthFilterTest {
     @Test
     void rejectsIssuerDifferentFromConfiguration() throws Exception {
         String token = Jwts.builder().subject("123").issuer("techchallenge-ofisy-api")
-                .claim("roles", java.util.List.of("ROLE_ADMIN"))
+                .claim("roles", List.of("ROLE_ADMIN"))
                 .signWith(Keys.hmacShaKeyFor(SECRET.getBytes(StandardCharsets.UTF_8))).compact();
         assertRejected(token);
     }
@@ -74,7 +75,7 @@ class JwtAuthFilterTest {
     @Test
     void rejectsSignatureWithAnotherSecret() throws Exception {
         String token = Jwts.builder().subject("123").issuer(ISSUER)
-                .claim("roles", java.util.List.of("ROLE_ADMIN"))
+                .claim("roles", List.of("ROLE_ADMIN"))
                 .signWith(Keys.hmacShaKeyFor("another-secret-at-least-32-bytes-long".getBytes(StandardCharsets.UTF_8))).compact();
         assertRejected(token);
     }
@@ -82,7 +83,7 @@ class JwtAuthFilterTest {
     @Test
     void rejectsExpiredToken() throws Exception {
         String token = Jwts.builder().subject("123").issuer(ISSUER)
-                .claim("roles", java.util.List.of("ROLE_ADMIN"))
+                .claim("roles", List.of("ROLE_ADMIN"))
                 .expiration(new Date(0))
                 .signWith(Keys.hmacShaKeyFor(SECRET.getBytes(StandardCharsets.UTF_8))).compact();
         assertRejected(token);
