@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import software.amazon.awssdk.enhanced.dynamodb.DynamoDbEnhancedClient;
 import software.amazon.awssdk.enhanced.dynamodb.TableSchema;
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -35,7 +36,7 @@ class DynamoDbPaginationIntegrationTest {
                         expected.addFirst(id);
                     }
                     // Wait for GSI propagation without assuming strongly consistent index reads.
-                    var deadline = System.nanoTime() + java.time.Duration.ofSeconds(15).toNanos();
+                    var deadline = System.nanoTime() + Duration.ofSeconds(15).toNanos();
                     while (repository.findAllByType(type, 10, null).getItems().size() != 5 && System.nanoTime() < deadline) {
                         try { Thread.sleep(50); } catch (InterruptedException e) { Thread.currentThread().interrupt(); throw new RuntimeException(e); }
                     }
