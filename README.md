@@ -21,3 +21,15 @@ propagadas para retry; somente conflito de chave é tratado como evento já proc
 Para executar o teste concorrente contra DynamoDB Local, defina
 `DYNAMODB_TEST_ENDPOINT=http://localhost:8000` e execute `mvn clean verify`.
 O teste cria e remove uma tabela temporária exclusiva; sem essa variável ele é pulado.
+
+## JWT
+
+Defina `APP_JWT_SECRET` externamente com a mesma chave HMAC usada pelo emissor,
+com pelo menos 32 bytes (e tamanho compatível com o algoritmo de assinatura).
+A aplicação não possui chave padrão e falha na inicialização se a chave estiver
+ausente, vazia ou for curta demais. Nunca versione o valor real.
+
+Defina `APP_JWT_ISSUER` com o issuer exato do token emitido pelo serviço de autenticação
+(padrão `techchallenge-ofisy-auth`). O filtro valida esse valor configurado.
+Se a antiga chave numérica tiver sido usada em algum ambiente acessível, ela deve
+ser substituída no emissor e no consumidor, invalidando os tokens antigos.
