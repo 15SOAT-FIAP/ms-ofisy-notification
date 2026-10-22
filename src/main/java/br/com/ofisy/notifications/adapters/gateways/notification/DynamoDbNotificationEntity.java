@@ -10,8 +10,8 @@ import java.time.LocalDateTime;
 @DynamoDbBean
 public class DynamoDbNotificationEntity {
     private String id;
-    private String referenceId; // e.g. serviceOrderId or stockId
-    private String type; // LOW_STOCK, QUOTE_GENERATED
+    private String referenceId;
+    private String type;
     private String message;
     private Boolean read;
     private LocalDateTime createdAt;
