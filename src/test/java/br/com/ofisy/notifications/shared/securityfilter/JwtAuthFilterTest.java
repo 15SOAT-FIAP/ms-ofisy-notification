@@ -14,6 +14,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.core.context.SecurityContextHolder;
 
 import java.io.PrintWriter;
+import io.jsonwebtoken.security.WeakKeyException;
 import java.util.Date;
 import java.util.List;
 
@@ -93,7 +94,7 @@ class JwtAuthFilterTest {
     void refusesMissingBlankOrWeakSecretsAndBlankIssuer() {
         assertThrows(IllegalArgumentException.class, () -> new JwtAuthFilter(null, ISSUER));
         assertThrows(IllegalArgumentException.class, () -> new JwtAuthFilter(" ", ISSUER));
-        assertThrows(io.jsonwebtoken.security.WeakKeyException.class, () -> new JwtAuthFilter("short", ISSUER));
+        assertThrows(WeakKeyException.class, () -> new JwtAuthFilter("short", ISSUER));
         assertThrows(IllegalArgumentException.class, () -> new JwtAuthFilter(SECRET, " "));
         assertThrows(IllegalArgumentException.class, () -> new JwtAuthFilter(SECRET, null));
     }
