@@ -4,6 +4,7 @@ import br.com.ofisy.notifications.adapters.controllers.notification.dto.Paginate
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import java.util.UUID;
+import br.com.ofisy.notifications.application.notification.exceptions.InvalidPaginationException;
 import br.com.ofisy.notifications.application.notification.findstockbyid.FindStockNotificationByIdUseCase;
 import br.com.ofisy.notifications.application.notification.findserviceorderbyid.FindServiceOrderNotificationByIdUseCase;
 import br.com.ofisy.notifications.application.notification.markstockasread.MarkStockNotificationAsReadUseCase;
@@ -48,19 +49,28 @@ public class NotificationController implements NotificationApi {
     @Override
     @PreAuthorize("hasAnyRole('ADMIN','STOCKMAN')")
     public ResponseEntity<PaginatedResponseDTO<NotificationResponseDTO>> findAllStock(int limit,String nextToken) {
+        validateLimit(limit);
         return ResponseEntity.ok(NotificationPresenter.presentPage(findAllStockNotificationsUseCase.execute(limit, nextToken)));
     }
     @Override
     @PreAuthorize("hasAnyRole('ADMIN','STOCKMAN')")
     public ResponseEntity<PaginatedResponseDTO<NotificationResponseDTO>> findUnreadStock(int limit,String nextToken) {
+        validateLimit(limit);
         return ResponseEntity.ok(NotificationPresenter.presentPage(findUnreadStockNotificationsUseCase.execute(limit, nextToken)));
     }
     @Override
     public ResponseEntity<PaginatedResponseDTO<NotificationResponseDTO>> findAllServiceOrders(int limit,String nextToken) {
+        validateLimit(limit);
         return ResponseEntity.ok(NotificationPresenter.presentPage(findAllServiceOrderNotificationsUseCase.execute(limit, nextToken)));
     }
     @Override
     public ResponseEntity<PaginatedResponseDTO<NotificationResponseDTO>> findUnreadServiceOrders(int limit,String nextToken) {
+        validateLimit(limit);
         return ResponseEntity.ok(NotificationPresenter.presentPage(findUnreadServiceOrderNotificationsUseCase.execute(limit, nextToken)));
+    }
+    private static void validateLimit(int limit) {
+        if (limit < 1 || limit > 100) {
+            throw new InvalidPaginationException("limit deve estar entre 1 e 100");
+        }
     }
 }

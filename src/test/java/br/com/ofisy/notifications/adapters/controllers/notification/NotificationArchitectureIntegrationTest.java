@@ -98,7 +98,7 @@ class NotificationArchitectureIntegrationTest {
     }
 
     private String token(String issuer) {
-        return Jwts.builder().subject("tester").issuer(issuer).claim("roles", List.of("ROLE_ADMIN"))
+        return Jwts.builder().subject("tester").issuer(issuer).claim("role", "ADMIN")
                 .expiration(new Date(System.currentTimeMillis() + 60_000))
                 .signWith(Keys.hmacShaKeyFor(SECRET.getBytes(StandardCharsets.UTF_8))).compact();
     }

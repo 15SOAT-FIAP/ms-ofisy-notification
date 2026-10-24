@@ -21,9 +21,9 @@ def encode(value):
     return base64.urlsafe_b64encode(json.dumps(value, separators=(",", ":")).encode()).rstrip(b"=").decode()
 
 
-def token(issuer=ISSUER, secret=SECRET, roles=None):
+def token(issuer=ISSUER, secret=SECRET, role="ADMIN"):
     content = encode({"alg": "HS256", "typ": "JWT"}) + "." + encode({
-        "sub": "local-tester", "iss": issuer, "roles": roles or ["ROLE_ADMIN"],
+        "sub": "local-tester", "iss": issuer, "role": role,
         "iat": int(time.time()), "exp": int(time.time()) + 3600})
     signature = hmac.new(secret.encode(), content.encode(), hashlib.sha256).digest()
     return content + "." + base64.urlsafe_b64encode(signature).rstrip(b"=").decode()
@@ -55,6 +55,9 @@ def main():
     eventually(lambda: request("/stock", jwt=admin)[0] == 200, "API startup")
     assert request("/stock")[0] in (401, 403), "Anonymous stock access was allowed"
     assert request("/stock", jwt=token(issuer="wrong-issuer"))[0] == 401
+    assert request("/stock", jwt=token(role="MECHANIC"))[0] == 403
+    assert request("/stock", jwt=token(role="STOCKMAN"))[0] == 200
+    assert request("/stock", jwt=token(role=["ADMIN"]))[0] == 401
     assert request("/stock", jwt=token(secret="another-local-secret-with-at-least-32-bytes"))[0] == 401
     config = Config(connect_timeout=3, read_timeout=5, retries={"max_attempts": 1})
     sqs = boto3.client("sqs", endpoint_url="http://localstack:4566", config=config)
@@ -63,17 +66,17 @@ def main():
     sns = boto3.client("sns", endpoint_url="http://localstack:4566", config=config)
     topic_arns = {topic["TopicArn"].split(":")[-1]: topic["TopicArn"] for topic in sns.list_topics()["Topics"]}
     event_id = str(uuid.uuid4())
-    event = {"eventId": event_id, "type": "LOW_STOCK", "serviceOrderId": None, "occurredAt": "2026-10-13T00:00:00Z",
+    event = {"eventId": event_id, "type": "StockLow", "serviceOrderId": None, "occurredAt": "2026-10-13T00:00:00Z",
              "payload": {"stockId": str(uuid.uuid4()), "productName": "Radiador smoke test", "currentQuantity": 2, "minThreshold": 10}}
 
     def send(body):
-        sns.publish(TopicArn=topic_arns["ofisy-stock.fifo" if body["type"] == "LOW_STOCK" else "ofisy-billing.fifo"],
+        sns.publish(TopicArn=topic_arns["ofisy-stock-events.fifo" if body["type"] == "StockLow" else "ofisy-billing-events.fifo"],
                     Message=json.dumps(body), MessageGroupId=body.get("serviceOrderId") or body["payload"]["stockId"],
                     MessageAttributes={"type": {"DataType": "String", "StringValue": body["type"]}},
                          MessageDeduplicationId=str(uuid.uuid4()))
 
     send(event)
-    eventually(lambda: request("/stock/" + event_id, jwt=admin)[0] == 200, "LOW_STOCK consumption")
+    eventually(lambda: request("/stock/" + event_id, jwt=admin)[0] == 200, "StockLow consumption")
     stock_record = request("/stock/" + event_id, jwt=admin)[1]
     assert stock_record["stockId"] == event["payload"]["stockId"] and stock_record["quoteId"] is None
     assert stock_record["message"] == "Estoque baixo para Radiador smoke test. Quantidade atual: 2. Mínimo: 10"
@@ -97,15 +100,15 @@ def main():
     assert item["read"]["BOOL"] is True
     stock = request("/stock?limit=10", jwt=admin)[1]
     assert any(n["id"] == event_id for n in stock["items"])
-    quote = {"eventId": str(uuid.uuid4()), "type": "QUOTE_GENERATED", "occurredAt": event["occurredAt"],
-             "payload": {"quoteId": str(uuid.uuid4()), "serviceOrderId": str(uuid.uuid4()), "totalPrice": "123.45"}}
-    quote["serviceOrderId"] = quote["payload"]["serviceOrderId"]
+    quote = {"eventId": str(uuid.uuid4()), "type": "QuoteCreated", "occurredAt": event["occurredAt"],
+             "serviceOrderId": str(uuid.uuid4()),
+             "payload": {"quoteId": str(uuid.uuid4()), "totalPrice": "123.45"}}
     send(quote)
-    eventually(lambda: any(n["id"] == quote["eventId"] for n in request("/service-orders")[1]["items"]), "QUOTE_GENERATED public listing")
+    eventually(lambda: any(n["id"] == quote["eventId"] for n in request("/service-orders")[1]["items"]), "QuoteCreated public listing")
     quote_path = "/service-orders/" + quote["eventId"]
     quote_record = request(quote_path)[1]
     assert quote_record["quoteId"] == quote["payload"]["quoteId"] and quote_record["stockId"] is None
-    assert quote_record["message"] == "Orçamento #{} gerado para a ordem de serviço '{}'. Valor total: R$ 123.45".format(quote["payload"]["quoteId"], quote["payload"]["serviceOrderId"])
+    assert quote_record["message"] == "Orçamento #{} gerado para a ordem de serviço '{}'. Valor total: R$ 123.45".format(quote["payload"]["quoteId"], quote["serviceOrderId"])
     assert request("/stock/" + quote["eventId"], jwt=admin)[0] == 404
     assert request("/stock/" + quote["eventId"] + "/read", method="PATCH", jwt=admin)[0] == 404
     assert request(quote_path)[1]["read"] is False
@@ -119,6 +122,9 @@ def main():
     assert request(quote_path)[1]["updatedAt"] == quote_marked["updatedAt"]
     for category, notification_id in (("stock", event_id), ("service-orders", quote["eventId"])):
         eventually(lambda: not any(n["id"] == notification_id for n in request("/" + category + "/unread", jwt=admin)[1]["items"]), "unread list reflects read state")
+    for route in ("/stock", "/stock/unread", "/service-orders", "/service-orders/unread"):
+        for query in ("?limit=0", "?limit=-1", "?limit=101", "?nextToken=invalid!", "?nextToken="):
+            assert request(route + query, jwt=admin)[0] == 400, (route, query)
     missing = str(uuid.uuid4())
     for category in ("stock", "service-orders"):
         assert request("/" + category + "/" + missing, jwt=admin)[0] == 404
@@ -156,11 +162,17 @@ def main():
             wanted = expected_ids[category] - read_ids[category] if unread else expected_ids[category]
             assert len(seen) == len(set(seen)) and set(seen) == wanted, (route, seen, wanted)
 
-    # A valid payload with an unsubscribed routing attribute must be filtered by SNS.
-    ignored = {**event, "eventId": str(uuid.uuid4())}
-    sns.publish(TopicArn=topic_arns["ofisy-stock.fifo"], Message=json.dumps(ignored),
+    scoped = request("/stock?limit=1", jwt=admin)[1]["nextToken"]
+    assert scoped
+    for route in ("/stock/unread", "/service-orders", "/service-orders/unread"):
+        assert request(route + "?nextToken=" + urllib.parse.quote(scoped, safe=""), jwt=admin)[0] == 400
+    assert request("/stock?limit=100", jwt=admin)[0] == 200
+
+    # An unsubscribed envelope type is filtered even with a subscribed routing attribute.
+    ignored = {**event, "eventId": str(uuid.uuid4()), "type": "UNSUBSCRIBED"}
+    sns.publish(TopicArn=topic_arns["ofisy-stock-events.fifo"], Message=json.dumps(ignored),
                 MessageGroupId=ignored["payload"]["stockId"], MessageDeduplicationId=ignored["eventId"],
-                MessageAttributes={"type": {"DataType": "String", "StringValue": "UNSUBSCRIBED"}})
+                MessageAttributes={"type": {"DataType": "String", "StringValue": "StockLow"}})
     control = {**event, "eventId": str(uuid.uuid4())}
     send(control)
     eventually(lambda: request("/stock/" + control["eventId"], jwt=admin)[0] == 200, "SNS filter positive control")
@@ -189,9 +201,9 @@ def main():
     send(repaired)
     eventually(lambda: request("/stock/" + repaired["eventId"], jwt=admin)[0] == 200, "manual DLQ repair and replay")
     sqs.delete_message(QueueUrl=dlq, ReceiptHandle=failed["ReceiptHandle"])
-    print(json.dumps({"status": "PASS", "checks": ["SNS FIFO to SQS FIFO with raw envelope", "SNS type filter", "invalid payload retry and DLQ", "independent group progress", "manual DLQ repair and replay", "JWT issuer", "JWT signature", "anonymous stock denied",
-        "LOW_STOCK consumption", "PATCH read", "redelivery preserves read and updatedAt", "DynamoDB persistence",
-        "TypeIndex listing", "QUOTE_GENERATED consumption", "core message and DTO fields", "wrong-type GET/PATCH 404 both directions",
+    print(json.dumps({"status": "PASS", "checks": ["SNS FIFO to SQS FIFO with raw envelope", "SNS type filter", "invalid payload retry and DLQ", "independent group progress", "manual DLQ repair and replay", "JWT issuer", "JWT signature", "core employee role contract", "pagination validation", "anonymous stock denied",
+        "StockLow consumption", "PATCH read", "redelivery preserves read and updatedAt", "DynamoDB persistence",
+        "TypeIndex listing", "QuoteCreated consumption", "core message and DTO fields", "wrong-type GET/PATCH 404 both directions",
         "wrong-type PATCH preserves state", "missing-id GET/PATCH 404 both categories", "core public quote read route",
         "quote redelivery preserves read and updatedAt", "both unread lists reflect read state", "all four HTTP routes paginate without missing or duplicate records"], "stockNotificationId": event_id,
         "quoteNotificationId": quote["eventId"]}, indent=2), flush=True)
