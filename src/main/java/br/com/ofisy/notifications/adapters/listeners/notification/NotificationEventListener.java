@@ -39,12 +39,12 @@ public class NotificationEventListener {
             }
             case "QUOTE_GENERATED" -> {
                 requireObjectPayload(event);
-                var payload = jsonMapper.treeToValue(event.payload(), QuoteGeneratedPayload.class);
-                if (!payload.serviceOrderId().equals(event.serviceOrderId())) {
-                    throw new IllegalArgumentException("Envelope and payload serviceOrderId must match");
+                if (event.serviceOrderId() == null) {
+                    throw new IllegalArgumentException("serviceOrderId is required for QUOTE_GENERATED");
                 }
+                var payload = jsonMapper.treeToValue(event.payload(), QuoteGeneratedPayload.class);
                 quote.executeEvent(event.eventId(), new CreateQuoteCommand(
-                        payload.quoteId(), payload.serviceOrderId(), payload.totalPrice()));
+                        payload.quoteId(), event.serviceOrderId(), payload.totalPrice()));
             }
             default -> LOGGER.warn("Ignoring event {} of unknown type {}", event.eventId(), event.type());
         }

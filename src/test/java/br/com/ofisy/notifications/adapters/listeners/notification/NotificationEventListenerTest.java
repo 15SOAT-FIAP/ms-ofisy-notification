@@ -37,14 +37,16 @@ class NotificationEventListenerTest {
     }
 
     @Test
-    void deserializesSharedEnvelopeAndDelegatesQuoteCommand() {
+    void deserializesQuotePayloadWithoutServiceOrderAndDelegatesUsingEnvelopeId() {
         var ref = UUID.randomUUID();
         var order = UUID.randomUUID();
         var original = event("QUOTE_GENERATED", order,
-                Map.of("quoteId", ref, "serviceOrderId", order, "totalPrice", "123.45"));
+                Map.of("quoteId", ref, "totalPrice", "123.45"));
         var decoded = mapper.readValue(mapper.writeValueAsString(original), EventEnvelope.class);
         assertThat(decoded.eventId()).isEqualTo(original.eventId());
         assertThat(decoded.occurredAt()).isEqualTo(original.occurredAt());
+        assertThat(decoded.serviceOrderId()).isEqualTo(order);
+        assertThat(decoded.payload().has("serviceOrderId")).isFalse();
         listener.handleNotificationEvent(decoded);
         verify(quote).executeEvent(eq(original.eventId()), argThat(c ->
                 c.quoteId().equals(ref) && c.serviceOrderId().equals(order) && c.totalPrice().toString().equals("123.45")));
@@ -72,10 +74,25 @@ class NotificationEventListenerTest {
     }
 
     @Test
-    void mismatchedServiceOrderIsRejectedBeforeCreatingQuote() {
-        var event = event("QUOTE_GENERATED", UUID.randomUUID(),
-                Map.of("quoteId", UUID.randomUUID(), "serviceOrderId", UUID.randomUUID(), "totalPrice", "123.45"));
-        assertThatThrownBy(() -> listener.handleNotificationEvent(event)).isInstanceOf(IllegalArgumentException.class);
+    void missingEnvelopeServiceOrderIsRejectedBeforeCreatingQuote() {
+        var event = event("QUOTE_GENERATED", null,
+                Map.of("quoteId", UUID.randomUUID(), "totalPrice", "123.45"));
+        assertThatThrownBy(() -> listener.handleNotificationEvent(event))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("serviceOrderId is required for QUOTE_GENERATED");
+        verifyNoInteractions(low, quote);
+    }
+
+    @Test
+    void malformedOrMissingQuotePayloadFieldsDoNotInvokeUseCases() {
+        for (var payload : new Object[] {
+                Map.of("quoteId", "not-a-uuid", "totalPrice", "123.45"),
+                Map.of("totalPrice", "123.45"),
+                Map.of("quoteId", UUID.randomUUID()),
+                Map.of("quoteId", UUID.randomUUID(), "totalPrice", "invalid")}) {
+            assertThatThrownBy(() -> listener.handleNotificationEvent(event("QUOTE_GENERATED", UUID.randomUUID(), payload)))
+                    .isInstanceOf(RuntimeException.class);
+        }
         verifyNoInteractions(low, quote);
     }
 
