@@ -31,23 +31,32 @@ public class NotificationEventListener {
     @SqsListener("${app.aws.sqs.notification-queue:ofisy-notification.fifo}")
     public void handleNotificationEvent(EventEnvelope event) {
         switch (event.type()) {
-            case "LOW_STOCK" -> {
+            case "StockLow" -> {
                 requireObjectPayload(event);
                 var payload = jsonMapper.treeToValue(event.payload(), LowStockPayload.class);
-                lowStock.executeEvent(event.eventId(), new CreateLowStockCommand(
+                boolean created = lowStock.executeEvent(event.eventId(), new CreateLowStockCommand(
                         payload.stockId(), payload.productName(), payload.currentQuantity(), payload.minThreshold()));
+                logResult(event, payload.stockId(), created);
             }
-            case "QUOTE_GENERATED" -> {
+            case "QuoteCreated" -> {
                 requireObjectPayload(event);
-                var payload = jsonMapper.treeToValue(event.payload(), QuoteGeneratedPayload.class);
-                if (!payload.serviceOrderId().equals(event.serviceOrderId())) {
-                    throw new IllegalArgumentException("Envelope and payload serviceOrderId must match");
+                if (event.serviceOrderId() == null) {
+                    throw new IllegalArgumentException("serviceOrderId is required for QuoteCreated");
                 }
-                quote.executeEvent(event.eventId(), new CreateQuoteCommand(
-                        payload.quoteId(), payload.serviceOrderId(), payload.totalPrice()));
+                var payload = jsonMapper.treeToValue(event.payload(), QuoteGeneratedPayload.class);
+                boolean created = quote.executeEvent(event.eventId(), new CreateQuoteCommand(
+                        payload.quoteId(), event.serviceOrderId(), payload.totalPrice()));
+                logResult(event, payload.quoteId(), created);
             }
-            default -> LOGGER.warn("Ignoring event {} of unknown type {}", event.eventId(), event.type());
+            default -> LOGGER.warn("Ignoring eventId={} type={} serviceOrderId={} outcome=unsupported",
+                    event.eventId(), event.type(), event.serviceOrderId());
         }
+    }
+
+    private void logResult(EventEnvelope event, java.util.UUID referenceId, boolean created) {
+        LOGGER.info("eventId={} type={} serviceOrderId={} referenceId={} outcome={}",
+                event.eventId(), event.type(), event.serviceOrderId(), referenceId,
+                created ? "created" : "duplicate");
     }
 
     private void requireObjectPayload(EventEnvelope event) {

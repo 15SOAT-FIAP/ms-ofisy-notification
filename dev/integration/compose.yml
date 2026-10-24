@@ -29,7 +29,7 @@ services:
     build: ../..
     ports: ["127.0.0.1:18081:8081"]
     environment:
-      SPRING_PROFILES_ACTIVE: local
+      SPRING_PROFILES_ACTIVE: dev
       SPRING_CLOUD_AWS_DYNAMODB_ENDPOINT: http://localstack:4566
       SPRING_CLOUD_AWS_SQS_ENDPOINT: http://localstack:4566
       SPRING_CLOUD_AWS_REGION_STATIC: us-east-1
@@ -39,8 +39,8 @@ services:
       AWS_SECRET_ACCESS_KEY: test
       AWS_REGION: us-east-1
       AWS_EC2_METADATA_DISABLED: "true"
-      APP_JWT_SECRET: ${APP_JWT_SECRET:?Set a random local test secret}
-      APP_JWT_ISSUER: ofisy-local-test
+      APP_JWT_SECRET: ${APP_JWT_SECRET:-local-development-only-secret-at-least-32-bytes}
+      APP_JWT_ISSUER: techchallenge-ofisy-api
     depends_on:
       bootstrap:
         condition: service_completed_successfully
@@ -48,10 +48,10 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.tools
-    command: ["python", "/tools/smoke.py"]
+    command: ["python", "/tools/smoke_messaging.py"]
     environment:
       <<: *aws
-      APP_JWT_SECRET: ${APP_JWT_SECRET:?Local secret required}
-      APP_JWT_ISSUER: ofisy-local-test
+      APP_JWT_SECRET: ${APP_JWT_SECRET:-local-development-only-secret-at-least-32-bytes}
+      APP_JWT_ISSUER: techchallenge-ofisy-api
     profiles: [test]
     depends_on: [app]
