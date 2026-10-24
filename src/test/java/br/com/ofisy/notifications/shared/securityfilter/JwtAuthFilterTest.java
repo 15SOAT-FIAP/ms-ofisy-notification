@@ -17,6 +17,8 @@ import java.io.PrintWriter;
 import io.jsonwebtoken.security.WeakKeyException;
 import java.util.Date;
 import java.util.List;
+import java.util.Map;
+import static org.assertj.core.api.Assertions.assertThat;
 
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -28,7 +30,7 @@ import static org.mockito.Mockito.*;
 class JwtAuthFilterTest {
 
     private static final String SECRET = "supersecretkeythatisverylongandsecureforhs256";
-    private static final String ISSUER = "configured-notification-issuer";
+    private static final String ISSUER = "techchallenge-ofisy-api";
 
     private JwtAuthFilter filter;
 
@@ -53,7 +55,7 @@ class JwtAuthFilterTest {
 
         validToken = Jwts.builder()
                 .subject("123")
-                .claim("roles", List.of("ROLE_USER"))
+                .claim("role", "ATTENDANT")
                 .issuer(ISSUER)
                 .expiration(new Date(System.currentTimeMillis() + 100000))
                 .signWith(Keys.hmacShaKeyFor(SECRET.getBytes(StandardCharsets.UTF_8)))
@@ -67,8 +69,8 @@ class JwtAuthFilterTest {
 
     @Test
     void rejectsIssuerDifferentFromConfiguration() throws Exception {
-        String token = Jwts.builder().subject("123").issuer("techchallenge-ofisy-api")
-                .claim("roles", List.of("ROLE_ADMIN"))
+        String token = Jwts.builder().subject("123").issuer("unexpected-issuer")
+                .claim("role", "ADMIN")
                 .signWith(Keys.hmacShaKeyFor(SECRET.getBytes(StandardCharsets.UTF_8))).compact();
         assertRejected(token);
     }
@@ -76,7 +78,7 @@ class JwtAuthFilterTest {
     @Test
     void rejectsSignatureWithAnotherSecret() throws Exception {
         String token = Jwts.builder().subject("123").issuer(ISSUER)
-                .claim("roles", List.of("ROLE_ADMIN"))
+                .claim("role", "ADMIN")
                 .signWith(Keys.hmacShaKeyFor("another-secret-at-least-32-bytes-long".getBytes(StandardCharsets.UTF_8))).compact();
         assertRejected(token);
     }
@@ -84,7 +86,7 @@ class JwtAuthFilterTest {
     @Test
     void rejectsExpiredToken() throws Exception {
         String token = Jwts.builder().subject("123").issuer(ISSUER)
-                .claim("roles", List.of("ROLE_ADMIN"))
+                .claim("role", "ADMIN")
                 .expiration(new Date(0))
                 .signWith(Keys.hmacShaKeyFor(SECRET.getBytes(StandardCharsets.UTF_8))).compact();
         assertRejected(token);
@@ -116,6 +118,45 @@ class JwtAuthFilterTest {
 
         verify(filterChain).doFilter(request, response);
         assertNotNull(SecurityContextHolder.getContext().getAuthentication());
+    }
+
+    @Test
+    void coreEmployeeRolesMapToSpringAuthorities() throws Exception {
+        for (String role : new String[] {"ADMIN", "STOCKMAN", "ATTENDANT", "MECHANIC"}) {
+            SecurityContextHolder.clearContext();
+            String token = Jwts.builder().subject("employee@ofisy.com").issuer(ISSUER)
+                    .claim("role", role).expiration(new Date(System.currentTimeMillis() + 60_000))
+                    .signWith(Keys.hmacShaKeyFor(SECRET.getBytes(StandardCharsets.UTF_8))).compact();
+            when(request.getHeader("Authorization")).thenReturn("Bearer " + token);
+            filter.doFilterInternal(request, response, filterChain);
+            var auth = SecurityContextHolder.getContext().getAuthentication();
+            assertThat(auth.getName()).isEqualTo("employee@ofisy.com");
+            assertThat(auth.getAuthorities()).extracting("authority").containsExactly("ROLE_" + role);
+        }
+        verify(response, never()).setStatus(anyInt());
+    }
+
+    @Test
+    void malformedClaimsAreRejectedWithoutServerErrors() throws Exception {
+        for (Object role : List.of(List.of("ADMIN"), 123, Map.of("name", "ADMIN"), "UNKNOWN", "")) {
+            assertRejected(Jwts.builder().subject("employee").issuer(ISSUER).claim("role", role)
+                    .expiration(new Date(System.currentTimeMillis() + 60_000))
+                    .signWith(Keys.hmacShaKeyFor(SECRET.getBytes(StandardCharsets.UTF_8))).compact());
+            clearInvocations(request, response, filterChain, printWriter);
+        }
+        assertRejected(Jwts.builder().subject("employee").issuer(ISSUER).claim("roles", List.of("ROLE_ADMIN"))
+                .expiration(new Date(System.currentTimeMillis() + 60_000))
+                .signWith(Keys.hmacShaKeyFor(SECRET.getBytes(StandardCharsets.UTF_8))).compact());
+    }
+
+    @Test
+    void missingSubjectOrExpirationIsRejected() throws Exception {
+        assertRejected(Jwts.builder().issuer(ISSUER).claim("role", "ADMIN")
+                .expiration(new Date(System.currentTimeMillis() + 60_000))
+                .signWith(Keys.hmacShaKeyFor(SECRET.getBytes(StandardCharsets.UTF_8))).compact());
+        clearInvocations(request, response, filterChain, printWriter);
+        assertRejected(Jwts.builder().subject("employee").issuer(ISSUER).claim("role", "ADMIN")
+                .signWith(Keys.hmacShaKeyFor(SECRET.getBytes(StandardCharsets.UTF_8))).compact());
     }
 
     @Test

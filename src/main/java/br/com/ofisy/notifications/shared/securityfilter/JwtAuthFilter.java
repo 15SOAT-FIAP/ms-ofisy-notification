@@ -20,19 +20,20 @@ import javax.crypto.SecretKey;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
-import java.util.stream.Collectors;
+import java.util.Set;
 
 @Component
 public class JwtAuthFilter extends OncePerRequestFilter {
 
     public static final String AUTHORIZATION = "Authorization";
     public static final String BEARER = "Bearer ";
+    private static final Set<String> EMPLOYEE_ROLES = Set.of("ADMIN", "ATTENDANT", "MECHANIC", "STOCKMAN");
 
     private final SecretKey secretKey;
     private final String issuer;
 
     public JwtAuthFilter(@Value("${app.jwt.secret}") String secret,
-                         @Value("${app.jwt.issuer:techchallenge-ofisy-auth}") String issuer) {
+                         @Value("${app.jwt.issuer:techchallenge-ofisy-api}") String issuer) {
         if (secret == null || secret.isBlank()) {
             throw new IllegalArgumentException("app.jwt.secret must be configured externally");
         }
@@ -65,12 +66,13 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                     .getPayload();
 
             String email = claims.getSubject();
-            List<String> roles = claims.get("roles", List.class);
-
-            if (email != null && roles != null) {
-                List<SimpleGrantedAuthority> authorities = roles.stream()
-                        .map(SimpleGrantedAuthority::new)
-                        .collect(Collectors.toList());
+            Object roleClaim = claims.get("role");
+            if (email == null || email.isBlank() || claims.getExpiration() == null
+                    || !(roleClaim instanceof String role) || !EMPLOYEE_ROLES.contains(role)) {
+                throw new IllegalArgumentException("Invalid employee token claims");
+            }
+            {
+                var authorities = List.of(new SimpleGrantedAuthority("ROLE_" + role));
 
                 UsernamePasswordAuthenticationToken authentication =
                         new UsernamePasswordAuthenticationToken(email, null, authorities);
@@ -80,7 +82,11 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                 SecurityContextHolder.getContext().setAuthentication(authentication);
             }
         } catch (JwtException | IllegalArgumentException e) {
-            logger.error("Invalid JWT Token: " + e.getMessage()); response.setStatus(HttpServletResponse.SC_UNAUTHORIZED); response.getWriter().write("Unauthorized: Invalid token"); return;
+            SecurityContextHolder.clearContext();
+            logger.warn("Invalid employee JWT");
+            response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+            response.getWriter().write("Unauthorized: Invalid token");
+            return;
         }
 
         filterChain.doFilter(request, response);
