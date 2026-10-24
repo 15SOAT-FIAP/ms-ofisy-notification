@@ -27,7 +27,7 @@ class NotificationEventListenerTest {
     @Test
     void delegatesTypedLowStockCommandAndPropagatesFailures() {
         var ref = UUID.randomUUID();
-        var event = event("LOW_STOCK", null, Map.of("stockId", ref, "productName", "Radiador",
+        var event = event("StockLow", null, Map.of("stockId", ref, "productName", "Radiador",
                 "currentQuantity", 2, "minThreshold", 10));
         listener.handleNotificationEvent(event);
         verify(low).executeEvent(eq(event.eventId()), argThat(c -> c.stockId().equals(ref) && c.currentQuantity() == 2));
@@ -40,7 +40,7 @@ class NotificationEventListenerTest {
     void deserializesQuotePayloadWithoutServiceOrderAndDelegatesUsingEnvelopeId() {
         var ref = UUID.randomUUID();
         var order = UUID.randomUUID();
-        var original = event("QUOTE_GENERATED", order,
+        var original = event("QuoteCreated", order,
                 Map.of("quoteId", ref, "totalPrice", "123.45"));
         var decoded = mapper.readValue(mapper.writeValueAsString(original), EventEnvelope.class);
         assertThat(decoded.eventId()).isEqualTo(original.eventId());
@@ -56,8 +56,10 @@ class NotificationEventListenerTest {
     @Test
     void unknownTypeIsIgnoredAndInvalidKnownPayloadFails() {
         listener.handleNotificationEvent(event("UNKNOWN", null, Map.of()));
+        listener.handleNotificationEvent(event("LOW_STOCK", null, Map.of()));
+        listener.handleNotificationEvent(event("QUOTE_GENERATED", null, Map.of()));
         verifyNoInteractions(low, quote);
-        assertThatThrownBy(() -> listener.handleNotificationEvent(event("LOW_STOCK", null, "invalid")))
+        assertThatThrownBy(() -> listener.handleNotificationEvent(event("StockLow", null, "invalid")))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
@@ -67,7 +69,7 @@ class NotificationEventListenerTest {
                 Map.of("stockId", "not-a-uuid", "productName", "X", "currentQuantity", 2, "minThreshold", 10),
                 Map.of("stockId", UUID.randomUUID(), "productName", "X", "minThreshold", 10),
                 Map.of("stockId", UUID.randomUUID(), "productName", "X", "currentQuantity", "invalid", "minThreshold", 10)}) {
-            assertThatThrownBy(() -> listener.handleNotificationEvent(event("LOW_STOCK", null, payload)))
+            assertThatThrownBy(() -> listener.handleNotificationEvent(event("StockLow", null, payload)))
                     .isInstanceOf(RuntimeException.class);
         }
         verifyNoInteractions(low, quote);
@@ -75,11 +77,11 @@ class NotificationEventListenerTest {
 
     @Test
     void missingEnvelopeServiceOrderIsRejectedBeforeCreatingQuote() {
-        var event = event("QUOTE_GENERATED", null,
+        var event = event("QuoteCreated", null,
                 Map.of("quoteId", UUID.randomUUID(), "totalPrice", "123.45"));
         assertThatThrownBy(() -> listener.handleNotificationEvent(event))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("serviceOrderId is required for QUOTE_GENERATED");
+                .hasMessage("serviceOrderId is required for QuoteCreated");
         verifyNoInteractions(low, quote);
     }
 
@@ -90,7 +92,22 @@ class NotificationEventListenerTest {
                 Map.of("totalPrice", "123.45"),
                 Map.of("quoteId", UUID.randomUUID()),
                 Map.of("quoteId", UUID.randomUUID(), "totalPrice", "invalid")}) {
-            assertThatThrownBy(() -> listener.handleNotificationEvent(event("QUOTE_GENERATED", UUID.randomUUID(), payload)))
+            assertThatThrownBy(() -> listener.handleNotificationEvent(event("QuoteCreated", UUID.randomUUID(), payload)))
+                    .isInstanceOf(RuntimeException.class);
+        }
+        verifyNoInteractions(low, quote);
+    }
+
+    @Test
+    void emptyGenericPayloadIsAcceptedButKnownEventsRequireData() {
+        var generic = event("ExecutionStarted", UUID.randomUUID(), Map.of());
+        var decoded = mapper.readValue(mapper.writeValueAsString(generic), EventEnvelope.class);
+        assertThat(decoded.payload().isObject()).isTrue();
+        listener.handleNotificationEvent(decoded);
+        for (String type : new String[] {"StockLow", "QuoteCreated"}) {
+            assertThatThrownBy(() -> listener.handleNotificationEvent(event(type, UUID.randomUUID(), Map.of())))
+                    .isInstanceOf(RuntimeException.class);
+            assertThatThrownBy(() -> listener.handleNotificationEvent(event(type, UUID.randomUUID(), null)))
                     .isInstanceOf(RuntimeException.class);
         }
         verifyNoInteractions(low, quote);
