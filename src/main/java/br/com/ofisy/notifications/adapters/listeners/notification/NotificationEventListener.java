@@ -30,6 +30,16 @@ public class NotificationEventListener {
 
     @SqsListener("${app.aws.sqs.notification-queue:ofisy-notification.fifo}")
     public void handleNotificationEvent(EventEnvelope event) {
+        try {
+            dispatch(event);
+        } catch (RuntimeException failure) {
+            LOGGER.warn("eventId={} type={} serviceOrderId={} outcome=failed",
+                    event.eventId(), event.type(), event.serviceOrderId());
+            throw failure;
+        }
+    }
+
+    private void dispatch(EventEnvelope event) {
         switch (event.type()) {
             case "StockLow" -> {
                 requireObjectPayload(event);
