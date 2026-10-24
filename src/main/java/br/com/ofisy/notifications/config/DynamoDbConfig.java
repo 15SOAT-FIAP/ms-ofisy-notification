@@ -18,7 +18,7 @@ import java.net.URI;
 public class DynamoDbConfig {
 
     @Bean
-    @Profile("!local")
+    @Profile("!local & !dev")
     public DynamoDbClient dynamoDbClient(
             @Value("${spring.cloud.aws.region.static:us-east-1}") String region) {
         return DynamoDbClient.builder()
@@ -29,7 +29,7 @@ public class DynamoDbConfig {
     }
 
     @Bean
-    @Profile("local")
+    @Profile({"local", "dev"})
     public DynamoDbClient localDynamoDbClient(
             @Value("${spring.cloud.aws.dynamodb.endpoint:http://localhost:4566}") String endpoint,
             @Value("${spring.cloud.aws.region.static:us-east-1}") String region) {

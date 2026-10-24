@@ -1,0 +1,57 @@
+name: ofisy-notification-test
+services:
+  localstack:
+    image: localstack/localstack:4.9.0
+    ports: ["127.0.0.1:14566:4566"]
+    environment:
+      SERVICES: sns,sqs,dynamodb
+      AWS_DEFAULT_REGION: us-east-1
+      SQS_ENDPOINT_STRATEGY: path
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4566/_localstack/health"]
+      interval: 3s
+      timeout: 3s
+      retries: 40
+  bootstrap:
+    build:
+      context: .
+      dockerfile: Dockerfile.tools
+    command: ["python", "/tools/bootstrap.py"]
+    environment: &aws
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+      AWS_DEFAULT_REGION: us-east-1
+      AWS_EC2_METADATA_DISABLED: "true"
+    depends_on:
+      localstack:
+        condition: service_healthy
+  app:
+    build: ../..
+    ports: ["127.0.0.1:18081:8081"]
+    environment:
+      SPRING_PROFILES_ACTIVE: dev
+      SPRING_CLOUD_AWS_DYNAMODB_ENDPOINT: http://localstack:4566
+      SPRING_CLOUD_AWS_SQS_ENDPOINT: http://localstack:4566
+      SPRING_CLOUD_AWS_REGION_STATIC: us-east-1
+      SPRING_CLOUD_AWS_CREDENTIALS_ACCESS_KEY: test
+      SPRING_CLOUD_AWS_CREDENTIALS_SECRET_KEY: test
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+      AWS_REGION: us-east-1
+      AWS_EC2_METADATA_DISABLED: "true"
+      APP_JWT_SECRET: ${APP_JWT_SECRET:-local-development-only-secret-at-least-32-bytes}
+      APP_JWT_ISSUER: techchallenge-ofisy-api
+    depends_on:
+      bootstrap:
+        condition: service_completed_successfully
+  smoke:
+    build:
+      context: .
+      dockerfile: Dockerfile.tools
+    command: ["python", "/tools/smoke_messaging.py"]
+    environment:
+      <<: *aws
+      APP_JWT_SECRET: ${APP_JWT_SECRET:-local-development-only-secret-at-least-32-bytes}
+      APP_JWT_ISSUER: techchallenge-ofisy-api
+    profiles: [test]
+    depends_on: [app]
