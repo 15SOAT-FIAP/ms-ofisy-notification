@@ -2,7 +2,7 @@
 import json
 import time
 import uuid
-from events import client, event, send
+from events import client, event, send, assert_quote_subscription
 
 
 def eventually(operation, label):
@@ -16,11 +16,12 @@ def eventually(operation, label):
 
 def main():
     ddb, sqs = client("dynamodb"), client("sqs")
+    assert_quote_subscription()
 
     def item(body):
         return ddb.get_item(TableName="Notifications", Key={"id": {"S": body["eventId"]}}, ConsistentRead=True).get("Item")
 
-    for kind, internal in [("StockLow", "LOW_STOCK"), ("QuoteCreated", "QUOTE_GENERATED")]:
+    for kind, internal in [("StockLow", "LOW_STOCK"), ("QuoteSentForApproval", "QUOTE_GENERATED")]:
         body = event(kind)
         send(body)
         stored = eventually(lambda: item(body), kind + " consumption")
@@ -32,6 +33,17 @@ def main():
         time.sleep(3)
         assert item(body)["read"]["BOOL"] is True
         assert item(body)["updatedAt"] == stored["updatedAt"]
+
+    premature = event("QuoteCreated")
+    send(premature)
+    failure = {"eventId": str(uuid.uuid4()), "type": "StockConsumptionFailed",
+               "serviceOrderId": premature["serviceOrderId"], "occurredAt": premature["occurredAt"], "payload": {}}
+    send(failure)
+    approval = event("QuoteSentForApproval")
+    send(approval)
+    eventually(lambda: item(approval), "approval positive control")
+    assert item(premature) is None and item(failure) is None
+    assert "disponível para aprovação" in item(approval)["message"]["S"]
 
     ignored = event("StockLow")
     ignored["type"] = "Unsubscribed"
@@ -55,7 +67,7 @@ def main():
     send(invalid)
     eventually(lambda: item(invalid), "repair and replay")
     sqs.delete_message(QueueUrl=dlq, ReceiptHandle=failed["ReceiptHandle"])
-    print(json.dumps({"status": "PASS", "checks": ["canonical events", "internal types preserved", "body filters", "idempotence", "retry and DLQ", "independent group", "replay"]}))
+    print(json.dumps({"status": "PASS", "checks": ["canonical events", "no premature quote or stock failure notification", "approval message", "internal types preserved", "body filters", "idempotence", "retry and DLQ", "independent group", "replay"]}))
 
 
 if __name__ == "__main__":

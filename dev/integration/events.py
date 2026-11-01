@@ -19,25 +19,38 @@ def client(service):
 
 def event(kind):
     return {"eventId": str(uuid.uuid4()), "type": kind,
-            "serviceOrderId": str(uuid.uuid4()) if kind == "QuoteCreated" else None,
+            "serviceOrderId": str(uuid.uuid4()) if kind in ("QuoteSentForApproval", "QuoteCreated") else None,
             "occurredAt": datetime.now(timezone.utc).isoformat(),
             "payload": ({"quoteId": str(uuid.uuid4()), "totalPrice": "123.45"}
-                        if kind == "QuoteCreated" else
+                        if kind in ("QuoteSentForApproval", "QuoteCreated") else
                         {"stockId": str(uuid.uuid4()), "productName": "Radiador", "currentQuantity": 2, "minThreshold": 10})}
 
 
 def send(body, topic=None):
     sns = client("sns")
-    name = topic or ("ofisy-stock-events.fifo" if body["type"] == "StockLow" else "ofisy-billing-events.fifo")
+    name = topic or ("ofisy-stock-events.fifo" if body["type"] in ("StockLow", "StockConsumptionFailed") else "ofisy-billing-events.fifo")
     arn = next(t["TopicArn"] for t in sns.list_topics()["Topics"] if t["TopicArn"].endswith(":" + name))
     sns.publish(TopicArn=arn, Message=json.dumps(body),
                 MessageGroupId=body.get("serviceOrderId") or body["payload"]["stockId"],
                 MessageDeduplicationId=str(uuid.uuid4()))
 
 
+def assert_quote_subscription():
+    sns = client("sns")
+    arn = next(t["TopicArn"] for t in sns.list_topics()["Topics"]
+               if t["TopicArn"].endswith(":ofisy-billing-events.fifo"))
+    subscriptions = sns.list_subscriptions_by_topic(TopicArn=arn)["Subscriptions"]
+    notification = [s for s in subscriptions if s["Endpoint"].endswith(":ofisy-notification.fifo")]
+    assert len(notification) == 1, "Expected one Billing subscription for Notification"
+    attrs = sns.get_subscription_attributes(SubscriptionArn=notification[0]["SubscriptionArn"])["Attributes"]
+    assert attrs["FilterPolicyScope"] == "MessageBody"
+    assert json.loads(attrs["FilterPolicy"]) == {"type": ["QuoteSentForApproval"]}
+    assert attrs["RawMessageDelivery"] == "true"
+
+
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("scenario", choices=["stock", "quote", "invalid", "status", "replay"])
+    parser.add_argument("scenario", choices=["stock", "quote", "quote-created", "stock-failure", "invalid", "status", "replay"])
     args = parser.parse_args()
     sqs = client("sqs")
     if args.scenario == "status":
@@ -62,7 +75,12 @@ def main():
             sqs.delete_message(QueueUrl=queue, ReceiptHandle=message["ReceiptHandle"])
             print(json.dumps(body))
     else:
-        body = event("QuoteCreated" if args.scenario == "quote" else "StockLow")
+        body = event("QuoteSentForApproval" if args.scenario == "quote" else "StockLow")
+        if args.scenario == "quote-created":
+            body = event("QuoteCreated")
+        elif args.scenario == "stock-failure":
+            body = {"eventId": str(uuid.uuid4()), "type": "StockConsumptionFailed",
+                    "serviceOrderId": str(uuid.uuid4()), "occurredAt": datetime.now(timezone.utc).isoformat(), "payload": {}}
         if args.scenario == "invalid":
             del body["payload"]["currentQuantity"]
         send(body)
