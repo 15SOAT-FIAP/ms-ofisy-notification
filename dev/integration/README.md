@@ -56,3 +56,9 @@ mvn test-compile failsafe:integration-test failsafe:verify -Dit.test=Notificatio
 Para validar a suíte inteira sem skips, mantenha DYNAMODB_TEST_ENDPOINT configurado para as integrações DynamoDB anteriores e rode `mvn clean verify`, seguido de `python dev/integration/assert_reports.py`. O verificador exige também NotificationEventListenerIT nos relatórios de Failsafe. O CI executa essa sequência e publica os relatórios de Surefire e Failsafe.
 
 O bootstrap aceita LOCALSTACK_ENDPOINT para o hook de inicialização interno do Testcontainers; sem a variável, mantém o endereço do Compose. Configurações MVC com mocks ficam marcadas como TestConfiguration para não substituir beans da aplicação no teste completo.
+
+## Reutilização do JAR no CI
+
+Depois de `mvn clean verify` e do gate dos relatórios, o CI aplica também `compose.ci.yml`. Esse override usa `Dockerfile.ci` para copiar o JAR já validado para a mesma base Java 21 JRE e usuário sem privilégios do runtime habitual, sem baixar dependências Maven ou compilar novamente. O ignore específico desse Dockerfile envia somente `target/*.jar` como contexto de aplicação. Todos os testes, cobertura e cenários do smoke continuam obrigatórios.
+
+O Compose de desenvolvimento continua compilando a partir dos fontes pelo Dockerfile principal. Para reproduzir o smoke do CI após a validação Maven, use `docker compose -f dev/integration/compose.yml -f dev/integration/compose.ci.yml up -d --build app`, seguido de `docker compose -f dev/integration/compose.yml -f dev/integration/compose.ci.yml run --rm --build --no-deps smoke`, em ambiente limpo.
