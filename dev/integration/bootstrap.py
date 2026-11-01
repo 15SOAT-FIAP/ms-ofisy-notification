@@ -1,12 +1,13 @@
 """Local-only topology: producer topics -> filtered FIFO queue -> FIFO DLQ."""
 import json
+import os
 import time
 import boto3
 from botocore.config import Config
 
 TABLE = "Notifications"
 QUEUE = "ofisy-notification.fifo"
-ENDPOINT = "http://localstack:4566"
+ENDPOINT = os.environ.get("LOCALSTACK_ENDPOINT", "http://localstack:4566")
 CONFIG = Config(connect_timeout=2, read_timeout=3, retries={"max_attempts": 1})
 
 

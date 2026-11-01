@@ -40,3 +40,19 @@ O consumidor espera eventId/type/serviceOrderId/occurredAt no envelope e quoteId
 O smoke publica QuoteCreated sem notificação, simula falha de estoque sem envio para aprovação e usa QuoteSentForApproval como controle positivo. Também entrega QuoteCreated diretamente na SQS, exercita o evento novo sem atributos SNS redundantes e valida payload inválido de aprovação → retry → DLQ → reparo/replay. O texto esperado é “Orçamento #{quoteId} disponível para aprovação na ordem de serviço '{serviceOrderId}'. Valor total: R$ {valor com duas casas}”. O tipo persistido/API QUOTE_GENERATED e o schema DynamoDB são mantidos.
 
 A assinatura AWS de Billing para Notification também precisa mudar seu filtro para QuoteSentForApproval de forma coordenada com a implantação do consumidor e o publicador. O bootstrap altera somente LocalStack. Core e Notification são consumidores independentes: o recebimento do evento não garante que o Core já tenha atualizado o status da OS. A notificação não consulta outro banco/serviço para aguardar essa atualização.
+
+## Testes automatizados do consumidor SQS
+
+`NotificationEventListenerIT` segue o padrão JUnit + SpringBootTest + Testcontainers + Awaitility. O teste sobe seu próprio LocalStack 4.9.0 com SNS/SQS/DynamoDB em porta dinâmica, executa o mesmo bootstrap deste Compose e inicia o listener real da aplicação. Não usa mocks de casos de uso/repository nem chama o listener diretamente. O container de teste é removido automaticamente e não interfere neste ambiente de desenvolvimento.
+
+Os testes enviam mensagens e verificam a ação persistida: mensagem/referência/tipo de QuoteSentForApproval e StockLow; descarte de QuoteCreated e compensações; assinatura SNS por corpo sem atributos redundantes; redelivery após marcar leitura; retry, DLQ, progresso de outro grupo e reparo/replay de payloads inválidos. Para negativos e duplicatas, uma mensagem de controle no mesmo grupo FIFO confirma que a entrega anterior foi consumida; asserções não dependem de um sleep fixo.
+
+`mvn test` executa os testes da fase de unidade. `mvn verify` também executa o consumidor pelo Maven Failsafe; Docker é obrigatório para essa etapa, e a classe não é silenciosamente pulada sem Docker. Para rodar somente a classe de mensageria:
+
+```sh
+mvn test-compile failsafe:integration-test failsafe:verify -Dit.test=NotificationEventListenerIT
+```
+
+Para validar a suíte inteira sem skips, mantenha DYNAMODB_TEST_ENDPOINT configurado para as integrações DynamoDB anteriores e rode `mvn clean verify`, seguido de `python dev/integration/assert_reports.py`. O verificador exige também NotificationEventListenerIT nos relatórios de Failsafe. O CI executa essa sequência e publica os relatórios de Surefire e Failsafe.
+
+O bootstrap aceita LOCALSTACK_ENDPOINT para o hook de inicialização interno do Testcontainers; sem a variável, mantém o endereço do Compose. Configurações MVC com mocks ficam marcadas como TestConfiguration para não substituir beans da aplicação no teste completo.
