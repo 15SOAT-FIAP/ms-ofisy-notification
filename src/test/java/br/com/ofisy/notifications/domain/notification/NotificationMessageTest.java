@@ -32,18 +32,6 @@ class NotificationMessageTest {
     }
 
     @Test
-    @DisplayName("Deve formatar NotificationMessage para orçamento")
-    void shouldFormatQuoteMessage() {
-        UUID quoteId = UUID.randomUUID();
-        UUID orderId = UUID.randomUUID();
-
-        NotificationMessage msg = NotificationMessage.forQuote(quoteId, orderId, new BigDecimal("123.45"));
-
-        assertThat(msg.getContent())
-                .isEqualTo("Orçamento #" + quoteId + " gerado para a ordem de serviço '" + orderId + "'. Valor total: R$ 123.45");
-    }
-
-    @Test
     void shouldFormatQuoteSentForApprovalMessage() {
         UUID quoteId = UUID.randomUUID();
         UUID orderId = UUID.randomUUID();

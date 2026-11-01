@@ -29,7 +29,7 @@ Para a suíte Java no PowerShell: `$env:DYNAMODB_TEST_ENDPOINT='http://localhost
 
 ## Limites desta entrega
 
-Categorias internas, referências, estado de leitura e 404 para tipo incorreto permanecem equivalentes ao core. A entrada por evento de orçamento agora produz a mensagem de disponibilidade para aprovação no domínio; execute(command) preserva o texto legado de orçamento gerado. O listener continua traduzindo transporte em commands. Eventos adicionais desenhados para notification precisam de matriz evento/regra/schema aprovada; esta entrega cobre StockLow e QuoteSentForApproval. Exemplos do desenho com type divergente do título não devem ser copiados literalmente. Terraform, IAM, alarmes, integração real com publicadores e a política de acesso via Gateway são dependências próprias, não comprovadas por LocalStack.
+Categorias internas, referências, estado de leitura e 404 para tipo incorreto permanecem equivalentes ao core. A entrada por evento de orçamento agora produz a mensagem de disponibilidade para aprovação no domínio. A entrada legada execute(command) de orçamento e a mensagem de orçamento gerado foram descomissionadas; a criação de orçamento exige eventId para deduplicação. O listener continua traduzindo transporte em commands. Eventos adicionais desenhados para notification precisam de matriz evento/regra/schema aprovada; esta entrega cobre StockLow e QuoteSentForApproval. Exemplos do desenho com type divergente do título não devem ser copiados literalmente. Terraform, IAM, alarmes, integração real com publicadores e a política de acesso via Gateway são dependências próprias, não comprovadas por LocalStack.
 
 ## Orçamento disponível para aprovação
 
