@@ -39,3 +39,7 @@ as chaves DynamoDB. Na API, `items` e `nextToken` permanecem com o mesmo contrat
 As fábricas genéricas de criação e reconstrução tratam cada `NotificationType` com switch
 expression exaustiva, sem fallback para orçamento, e rejeitam tipo nulo explicitamente.
 As regras para os tipos válidos, referências, mensagens, leitura e datas são preservadas.
+
+## Entrada de orçamento por evento
+
+O consumidor de orçamento recebe QuoteSentForApproval, após a etapa de estoque prevista na coreografia de Billing. QuoteCreated não cria o aviso de aprovação em Notification. A mensagem de disponibilidade para aprovação é composta por NotificationMessage.forQuoteSentForApproval, chamada por executeEvent; execute(command) mantém a mensagem legada de criação. O nome externo do evento não muda o enum interno/persistido QUOTE_GENERATED, o schema DynamoDB ou os contratos HTTP.

@@ -2,7 +2,7 @@
 
 ## DynamoDB
 
-Sem o perfil `local`, o cliente usa o endpoint AWS da região configurada em
+Fora dos perfis `local` e `dev`, o cliente usa o endpoint AWS da região configurada em
 `SPRING_CLOUD_AWS_REGION_STATIC` (padrão `us-east-1`) e a cadeia padrão de credenciais
 do AWS SDK, incluindo IAM roles. Não há credenciais de teste nesse modo.
 
@@ -26,7 +26,7 @@ O teste cria e remove uma tabela temporária exclusiva; sem essa variável ele �
 
 Defina `APP_JWT_SECRET` externamente com a mesma chave HMAC usada pelo emissor de funcionário,
 com pelo menos 32 bytes (e tamanho compatível com o algoritmo de assinatura).
-A aplicação não possui chave padrão e falha na inicialização se a chave estiver
+Fora do perfil `dev`, a aplicação não possui chave padrão e falha na inicialização se a chave estiver
 ausente, vazia ou for curta demais. Nunca versione o valor real.
 
 Defina `APP_JWT_ISSUER` com o issuer exato do token de funcionário emitido pelo core
@@ -44,11 +44,17 @@ e o context path. Caminhos como `service-orders-admin` não são incluídos.
 O serviço não passa a validar localmente o JWT de cliente nem a extrair permissões de
 funcionário dele. No deploy, essas rotas devem ser expostas pela fronteira autenticada
 do Gateway; a aplicação não deve ganhar uma entrada pública alternativa que contorne
-o authorizer. As rotas de estoque continuam protegidas pelo JWT de funcionário e,
-quando a API for adicionada, pela autorização ADMIN/STOCKMAN.
+o authorizer. As rotas de estoque exigem JWT de funcionário com perfil ADMIN ou STOCKMAN.
 
 `JwtCustomerRoutesIntegrationTest` exercita a cadeia real de segurança com MockMvc e
-endpoints de teste, pois a API REST é introduzida no PR seguinte. Cobre o formato HS256
+endpoints de teste. Cobre o formato HS256
 da Lambda com chave distinta da de funcionário, GET/PATCH públicos, context path,
 query string, caminhos parecidos e a manutenção da proteção de estoque. O teste não
 substitui uma validação do Gateway implantado na AWS.
+
+## Eventos consumidos e ambiente local
+
+- StockLow: aviso de estoque baixo.
+- QuoteSentForApproval: orçamento disponível para aprovação após a etapa de estoque; serviceOrderId no envelope, quoteId/totalPrice no payload.
+
+QuoteCreated não cria notificação de orçamento. A mensagem nova é aplicada à entrada por evento; o command legado e o tipo interno QUOTE_GENERATED são preservados. Para subir LocalStack, publicar cenários e executar a integração, consulte [dev/integration/README.md](dev/integration/README.md). O filtro da assinatura SNS na AWS deve ser alinhado na infraestrutura responsável; o bootstrap local não altera a conta AWS.

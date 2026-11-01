@@ -47,7 +47,7 @@ def main():
     queue_arn = sqs.get_queue_attributes(QueueUrl=queue, AttributeNames=["QueueArn"])["Attributes"]["QueueArn"]
     topics = [
         (sns.create_topic(Name="ofisy-stock-events.fifo", Attributes={"FifoTopic": "true"})["TopicArn"], "StockLow"),
-        (sns.create_topic(Name="ofisy-billing-events.fifo", Attributes={"FifoTopic": "true"})["TopicArn"], "QuoteCreated")
+        (sns.create_topic(Name="ofisy-billing-events.fifo", Attributes={"FifoTopic": "true"})["TopicArn"], "QuoteSentForApproval")
     ]
     sqs.set_queue_attributes(QueueUrl=queue, Attributes={"Policy": json.dumps({
         "Version": "2012-10-17", "Statement": [{
