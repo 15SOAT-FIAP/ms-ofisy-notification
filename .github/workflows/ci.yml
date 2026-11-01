@@ -28,7 +28,7 @@ jobs:
       - name: Start isolated AWS services
         run: docker compose -p ofisy-ci -f dev/integration/compose.yml up -d --wait localstack
 
-      - name: Build & Test including DynamoDB integrations
+      - name: Build & Test including DynamoDB and SQS consumer integrations
         env:
           DYNAMODB_TEST_ENDPOINT: http://127.0.0.1:14566
         run: mvn -B clean verify --no-transfer-progress
@@ -54,6 +54,7 @@ jobs:
           name: integration-evidence
           path: |
             target/surefire-reports/
+            target/failsafe-reports/
             integration-compose.log
 
       - name: Upload JAR artifact

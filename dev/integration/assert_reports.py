@@ -2,10 +2,11 @@
 from pathlib import Path
 import xml.etree.ElementTree as ET
 
-reports = list(Path("target/surefire-reports").glob("TEST-*.xml"))
-assert reports, "Surefire reports are missing"
+reports = [report for folder in ("surefire-reports", "failsafe-reports")
+           for report in Path("target", folder).glob("TEST-*.xml")]
+assert reports, "JUnit reports are missing"
 required = {"DynamoDbNotificationAtomicInsertTest", "DynamoDbPaginationIntegrationTest",
-            "NotificationArchitectureIntegrationTest"}
+            "NotificationArchitectureIntegrationTest", "NotificationEventListenerIT"}
 total = 0
 for report in reports:
     suite = ET.parse(report).getroot()

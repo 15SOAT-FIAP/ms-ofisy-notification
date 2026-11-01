@@ -17,7 +17,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.aop.support.AopUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Configuration;
+import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Import;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.junit.jupiter.web.SpringJUnitWebConfig;
@@ -34,7 +34,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 /** Regression: method security must not replace the MVC controller with a JDK interface proxy. */
-@SpringJUnitWebConfig(NotificationWebSecurityContextTest.TestConfiguration.class)
+@SpringJUnitWebConfig(NotificationWebSecurityContextTest.TestBeans.class)
 @TestPropertySource(properties = {"app.jwt.secret=architecture-test-secret-with-at-least-32-bytes", "app.jwt.issuer=architecture-test"})
 class NotificationWebSecurityContextTest {
     @Autowired private WebApplicationContext context;
@@ -52,10 +52,10 @@ class NotificationWebSecurityContextTest {
         mvc.perform(get(path).with(user("user").roles("USER"))).andExpect(status().isForbidden());
     }
 
-    @Configuration
+    @TestConfiguration
     @EnableWebMvc
     @Import({NotificationController.class, SecurityConfig.class, JwtAuthFilter.class, FindStockNotificationByIdService.class, FindServiceOrderNotificationByIdService.class, MarkStockNotificationAsReadService.class, MarkServiceOrderNotificationAsReadService.class, FindAllStockNotificationsService.class, FindUnreadStockNotificationsService.class, FindAllServiceOrderNotificationsService.class, FindUnreadServiceOrderNotificationsService.class})
-    static class TestConfiguration {
+    static class TestBeans {
         @Bean
         NotificationRepository repository() {
             return mock(NotificationRepository.class);

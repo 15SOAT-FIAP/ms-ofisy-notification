@@ -26,7 +26,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Configuration;
+import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Import;
 import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.TestPropertySource;
@@ -48,7 +48,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 /** Real Spring MVC/security/use-case/gateway integration against isolated DynamoDB Local. */
 @EnabledIfEnvironmentVariable(named = "DYNAMODB_TEST_ENDPOINT", matches = ".+")
-@SpringJUnitWebConfig(NotificationArchitectureIntegrationTest.TestConfiguration.class)
+@SpringJUnitWebConfig(NotificationArchitectureIntegrationTest.TestBeans.class)
 @TestPropertySource(properties = {"app.jwt.secret=architecture-test-secret-with-at-least-32-bytes", "app.jwt.issuer=architecture-test"})
 @DirtiesContext
 class NotificationArchitectureIntegrationTest {
@@ -103,10 +103,10 @@ class NotificationArchitectureIntegrationTest {
                 .signWith(Keys.hmacShaKeyFor(SECRET.getBytes(StandardCharsets.UTF_8))).compact();
     }
 
-    @Configuration
+    @TestConfiguration
     @EnableWebMvc
     @Import({NotificationController.class, SecurityConfig.class, JwtAuthFilter.class, NotificationExceptionHandler.class, CreateLowStockNotificationService.class, FindStockNotificationByIdService.class, FindServiceOrderNotificationByIdService.class, MarkStockNotificationAsReadService.class, MarkServiceOrderNotificationAsReadService.class, FindAllStockNotificationsService.class, FindUnreadStockNotificationsService.class, FindAllServiceOrderNotificationsService.class, FindUnreadServiceOrderNotificationsService.class})
-    static class TestConfiguration {
+    static class TestBeans {
         @Bean(destroyMethod = "close")
         DynamoDbClient client() {
             return new DynamoDbConfig().localDynamoDbClient(System.getenv("DYNAMODB_TEST_ENDPOINT"), "us-east-1");
