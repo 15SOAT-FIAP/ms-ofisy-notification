@@ -2,7 +2,7 @@ package br.com.ofisy.notifications.adapters.listeners.notification;
 
 import br.com.ofisy.notifications.adapters.listeners.dto.EventEnvelope;
 import br.com.ofisy.notifications.adapters.listeners.dto.LowStockPayload;
-import br.com.ofisy.notifications.adapters.listeners.dto.QuoteGeneratedPayload;
+import br.com.ofisy.notifications.adapters.listeners.dto.QuoteSentForApprovalPayload;
 import br.com.ofisy.notifications.application.notification.createlowstock.CreateLowStockNotificationUseCase;
 import br.com.ofisy.notifications.application.notification.createlowstock.CreateLowStockNotificationUseCase.CreateLowStockCommand;
 import br.com.ofisy.notifications.application.notification.createquote.CreateQuoteNotificationUseCase;
@@ -48,12 +48,12 @@ public class NotificationEventListener {
                         payload.stockId(), payload.productName(), payload.currentQuantity(), payload.minThreshold()));
                 logResult(event, payload.stockId(), created);
             }
-            case "QuoteCreated" -> {
+            case "QuoteSentForApproval" -> {
                 requireObjectPayload(event);
                 if (event.serviceOrderId() == null) {
-                    throw new IllegalArgumentException("serviceOrderId is required for QuoteCreated");
+                    throw new IllegalArgumentException("serviceOrderId is required for QuoteSentForApproval");
                 }
-                var payload = jsonMapper.treeToValue(event.payload(), QuoteGeneratedPayload.class);
+                var payload = jsonMapper.treeToValue(event.payload(), QuoteSentForApprovalPayload.class);
                 boolean created = quote.executeEvent(event.eventId(), new CreateQuoteCommand(
                         payload.quoteId(), event.serviceOrderId(), payload.totalPrice()));
                 logResult(event, payload.quoteId(), created);

@@ -44,6 +44,15 @@ class NotificationMessageTest {
     }
 
     @Test
+    void shouldFormatQuoteSentForApprovalMessage() {
+        UUID quoteId = UUID.randomUUID();
+        UUID orderId = UUID.randomUUID();
+        var msg = NotificationMessage.forQuoteSentForApproval(quoteId, orderId, new BigDecimal("123.45"));
+        assertThat(msg.getContent()).isEqualTo("Orçamento #" + quoteId
+                + " disponível para aprovação na ordem de serviço '" + orderId + "'. Valor total: R$ 123.45");
+    }
+
+    @Test
     @DisplayName("Deve lançar erro ao criar mensagem com mais de 255 caracteres")
     void shouldThrowWhenMessageLengthIsGreaterThan255() {
         String longMessage = "a".repeat(256);
