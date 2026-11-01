@@ -31,15 +31,6 @@ public final class NotificationMessage {
         return new NotificationMessage(content);
     }
 
-    public static NotificationMessage forQuote(UUID quoteId, UUID serviceOrderId, BigDecimal totalPrice) {
-        String content = String.format(
-                Locale.US,
-                "Orçamento #%s gerado para a ordem de serviço '%s'. Valor total: R$ %.2f",
-                quoteId, serviceOrderId, totalPrice
-        );
-        return new NotificationMessage(content);
-    }
-
     public static NotificationMessage forQuoteSentForApproval(UUID quoteId, UUID serviceOrderId, BigDecimal totalPrice) {
         String content = String.format(
                 Locale.US,
