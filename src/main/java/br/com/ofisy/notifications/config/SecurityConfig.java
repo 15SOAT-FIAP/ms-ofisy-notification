@@ -11,6 +11,8 @@ import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
+import static br.com.ofisy.notifications.shared.securityfilter.NotificationRequestMatchers.CUSTOMER_NOTIFICATIONS;
+
 @Configuration
 @EnableWebSecurity
 @EnableMethodSecurity
@@ -31,8 +33,7 @@ public class SecurityConfig {
                 .httpBasic(AbstractHttpConfigurer::disable)
                 .formLogin(AbstractHttpConfigurer::disable)
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/api/v1/notifications/service-orders").permitAll()
-                        .requestMatchers("/api/v1/notifications/service-orders/**").permitAll()
+                        .requestMatchers(CUSTOMER_NOTIFICATIONS).permitAll()
                         .requestMatchers("/actuator/**").permitAll() // If actuator is added later
                         .anyRequest().authenticated()
                 )
