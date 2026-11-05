@@ -45,6 +45,12 @@ public class JwtAuthFilter extends OncePerRequestFilter {
     }
 
     @Override
+    protected boolean shouldNotFilter(HttpServletRequest request) {
+        // Customer JWTs belong to the Gateway authorizer, not the employee identity/role contract.
+        return NotificationRequestMatchers.CUSTOMER_NOTIFICATIONS.matches(request);
+    }
+
+    @Override
     protected void doFilterInternal(HttpServletRequest request,
                                     HttpServletResponse response,
                                     FilterChain filterChain) throws ServletException, IOException {
