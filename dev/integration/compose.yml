@@ -48,7 +48,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.tools
-    command: ["python", "/tools/smoke_messaging.py"]
+    command: ["python", "/tools/smoke.py"]
     environment:
       <<: *aws
       APP_JWT_SECRET: ${APP_JWT_SECRET:-local-development-only-secret-at-least-32-bytes}

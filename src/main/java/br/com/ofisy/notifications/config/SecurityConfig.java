@@ -15,7 +15,7 @@ import static br.com.ofisy.notifications.shared.securityfilter.NotificationReque
 
 @Configuration
 @EnableWebSecurity
-@EnableMethodSecurity
+@EnableMethodSecurity(proxyTargetClass = true)
 public class SecurityConfig {
 
     private final JwtAuthFilter jwtAuthFilter;
