@@ -24,7 +24,7 @@ O teste cria e remove uma tabela temporária exclusiva; sem essa variável ele �
 
 ## JWT
 
-Defina `APP_JWT_SECRET` externamente com a mesma chave HMAC usada pelo emissor de funcionário,
+Defina `JWT_SECRET` externamente com a mesma chave HMAC usada pelo emissor de funcionário,
 com pelo menos 32 bytes (e tamanho compatível com o algoritmo de assinatura).
 Fora do perfil `dev`, a aplicação não possui chave padrão e falha na inicialização se a chave estiver
 ausente, vazia ou for curta demais. Nunca versione o valor real.

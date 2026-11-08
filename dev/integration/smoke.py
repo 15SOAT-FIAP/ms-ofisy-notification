@@ -14,7 +14,7 @@ from botocore.config import Config
 from events import assert_quote_subscription
 
 BASE = "http://app:8081/api/v1/notifications"
-SECRET = os.environ["APP_JWT_SECRET"]
+SECRET = os.environ["JWT_SECRET"]
 ISSUER = os.environ["APP_JWT_ISSUER"]
 
 

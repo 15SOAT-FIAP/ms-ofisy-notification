@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Test;
 import tools.jackson.databind.json.JsonMapper;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -17,7 +18,18 @@ class NotificationEventListenerTest {
     private final CreateLowStockNotificationUseCase low = mock(CreateLowStockNotificationUseCase.class);
     private final CreateQuoteNotificationUseCase quote = mock(CreateQuoteNotificationUseCase.class);
     private final JsonMapper mapper = JsonMapper.builder().build();
-    private final NotificationEventListener listener = new NotificationEventListener(low, quote, mapper);
+    private final NotificationEventListener listener = new NotificationEventListener(List.of(
+            new StockLowEventHandler(low, mapper), new QuoteSentForApprovalEventHandler(quote, mapper)));
+
+    @Test
+    void rejectsDuplicateHandlersAtStartup() {
+        var first = new StockLowEventHandler(low, mapper);
+        var second = new StockLowEventHandler(low, mapper);
+
+        assertThatThrownBy(() -> new NotificationEventListener(List.of(first, second)))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("StockLow");
+    }
 
     private EventEnvelope event(String type, UUID serviceOrderId, Object payload) {
         return new EventEnvelope(UUID.randomUUID(), type, serviceOrderId, Instant.parse("2026-10-21T10:00:00Z"),
