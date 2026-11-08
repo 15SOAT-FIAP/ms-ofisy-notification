@@ -90,9 +90,6 @@ public class JwtAuthFilter extends OncePerRequestFilter {
         } catch (JwtException | IllegalArgumentException e) {
             SecurityContextHolder.clearContext();
             logger.warn("Invalid employee JWT");
-            response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
-            response.getWriter().write("Unauthorized: Invalid token");
-            return;
         }
 
         filterChain.doFilter(request, response);

@@ -1,6 +1,8 @@
 package br.com.ofisy.notifications.shared.securityfilter;
 
 import br.com.ofisy.notifications.config.SecurityConfig;
+import br.com.ofisy.notifications.config.security.OfisyAccessDeniedHandler;
+import br.com.ofisy.notifications.config.security.OfisyAuthenticationEntryPoint;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
 import org.junit.jupiter.api.BeforeEach;
@@ -15,6 +17,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.junit.jupiter.web.SpringJUnitWebConfig;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.RequestBuilder;
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -29,6 +32,7 @@ import java.util.Date;
 
 import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /** Real security chain and HTTP dispatch; probe endpoints because the REST API is introduced in PR #23. */
@@ -106,14 +110,25 @@ class JwtCustomerRoutesIntegrationTest {
     @ValueSource(strings = {"ATTENDANT", "MECHANIC"})
     void otherEmployeeRolesStillCannotAccessStock(String role) throws Exception {
         mvc.perform(MockMvcRequestBuilders.get(STOCK).header("Authorization", "Bearer " + employeeToken(role)))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.status").value(403))
+                .andExpect(jsonPath("$.title").value("Usuário sem permissão"))
+                .andExpect(jsonPath("$.detail").value("Você não tem permissão para acessar este recurso"));
     }
 
     @Test
     void anonymousAndMalformedEmployeeTokensStillCannotAccessStock() throws Exception {
-        mvc.perform(MockMvcRequestBuilders.get(STOCK)).andExpect(status().isForbidden());
-        mvc.perform(MockMvcRequestBuilders.get(STOCK).header("Authorization", "Bearer invalid-token"))
-                .andExpect(status().isUnauthorized());
+        assertAuthenticationRequired(MockMvcRequestBuilders.get(STOCK));
+        assertAuthenticationRequired(MockMvcRequestBuilders.get(STOCK)
+                .header("Authorization", "Bearer invalid-token"));
+    }
+
+    private void assertAuthenticationRequired(RequestBuilder request) throws Exception {
+        mvc.perform(request)
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.status").value(401))
+                .andExpect(jsonPath("$.title").value("Usuário não autorizado"))
+                .andExpect(jsonPath("$.detail").value("Autenticação necessária para acessar este recurso"));
     }
 
     private static String customerToken() {
@@ -135,7 +150,7 @@ class JwtCustomerRoutesIntegrationTest {
 
     @TestConfiguration(proxyBeanMethods = false)
     @EnableWebMvc
-    @Import({SecurityConfig.class, JwtAuthFilter.class, ProbeController.class})
+    @Import({SecurityConfig.class, JwtAuthFilter.class, OfisyAuthenticationEntryPoint.class, OfisyAccessDeniedHandler.class, ProbeController.class})
     static class WebConfig {}
 
     @RestController
