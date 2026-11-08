@@ -39,7 +39,7 @@ services:
       AWS_SECRET_ACCESS_KEY: test
       AWS_REGION: us-east-1
       AWS_EC2_METADATA_DISABLED: "true"
-      APP_JWT_SECRET: ${APP_JWT_SECRET:-local-development-only-secret-at-least-32-bytes}
+      JWT_SECRET: ${JWT_SECRET:-local-development-only-secret-at-least-32-bytes}
       APP_JWT_ISSUER: techchallenge-ofisy-api
     depends_on:
       bootstrap:
@@ -51,7 +51,7 @@ services:
     command: ["python", "/tools/smoke_messaging.py"]
     environment:
       <<: *aws
-      APP_JWT_SECRET: ${APP_JWT_SECRET:-local-development-only-secret-at-least-32-bytes}
+      JWT_SECRET: ${JWT_SECRET:-local-development-only-secret-at-least-32-bytes}
       APP_JWT_ISSUER: techchallenge-ofisy-api
     profiles: [test]
     depends_on: [app]
