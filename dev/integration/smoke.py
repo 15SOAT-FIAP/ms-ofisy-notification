@@ -13,7 +13,7 @@ import boto3
 from botocore.config import Config
 
 BASE = "http://app:8081/api/v1/notifications"
-SECRET = os.environ["APP_JWT_SECRET"]
+SECRET = os.environ["JWT_SECRET"]
 ISSUER = os.environ["APP_JWT_ISSUER"]
 
 
