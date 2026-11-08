@@ -13,5 +13,5 @@ spring:
         endpoint: ${LOCALSTACK_ENDPOINT:http://localhost:14566}
 app:
   jwt:
-    secret: ${APP_JWT_SECRET:local-development-only-secret-at-least-32-bytes}
+    secret: ${JWT_SECRET:local-development-only-secret-at-least-32-bytes}
     issuer: techchallenge-ofisy-api

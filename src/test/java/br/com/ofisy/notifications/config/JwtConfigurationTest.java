@@ -19,7 +19,7 @@ class JwtConfigurationTest {
 
     @Test
     void configurationWithoutExternalSecretFailsAtStartup() {
-        runner.withPropertyValues("APP_JWT_SECRET=").run(context -> {
+        runner.withPropertyValues("JWT_SECRET=").run(context -> {
             assertThat(context).hasFailed();
             assertThat(context.getStartupFailure()).hasRootCauseMessage("app.jwt.secret must be configured externally");
         });
@@ -32,13 +32,13 @@ class JwtConfigurationTest {
                 new MapPropertySource(StandardEnvironment.SYSTEM_ENVIRONMENT_PROPERTY_SOURCE_NAME, Map.of())))
                 .run(context -> {
                     assertThat(context).hasFailed();
-                    assertThat(context.getStartupFailure()).rootCause().hasMessageContaining("APP_JWT_SECRET");
+                    assertThat(context.getStartupFailure()).rootCause().hasMessageContaining("JWT_SECRET");
                 });
     }
 
     @Test
     void externalSecretAndIssuerCreateFilter() {
-        runner.withPropertyValues("APP_JWT_SECRET=external-test-secret-with-more-than-32-bytes",
+        runner.withPropertyValues("JWT_SECRET=external-test-secret-with-more-than-32-bytes",
                 "APP_JWT_ISSUER=external-test-issuer").run(context -> {
             assertThat(context).hasNotFailed().hasSingleBean(JwtAuthFilter.class);
         });
