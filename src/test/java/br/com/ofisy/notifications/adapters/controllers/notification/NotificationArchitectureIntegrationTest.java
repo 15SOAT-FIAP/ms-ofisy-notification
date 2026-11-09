@@ -15,6 +15,8 @@ import br.com.ofisy.notifications.application.notification.createlowstock.Create
 import br.com.ofisy.notifications.config.NotificationExceptionHandler;
 import br.com.ofisy.notifications.config.DynamoDbConfig;
 import br.com.ofisy.notifications.config.SecurityConfig;
+import br.com.ofisy.notifications.config.security.OfisyAccessDeniedHandler;
+import br.com.ofisy.notifications.config.security.OfisyAuthenticationEntryPoint;
 import br.com.ofisy.notifications.domain.notification.Notification;
 import br.com.ofisy.notifications.domain.notification.NotificationRepository;
 import br.com.ofisy.notifications.domain.notification.NotificationType;
@@ -72,11 +74,12 @@ class NotificationArchitectureIntegrationTest {
         var command=new CreateLowStockCommand(notification.getStockId(),"Radiador",2,10);
         assertThat(createNotification.executeEvent(notification.getId(),command)).isTrue();
         String path = "/api/v1/notifications/stock/" + notification.getId();
-        mvc.perform(get(path)).andExpect(result -> assertThat(result.getResponse().getStatus()).isIn(401, 403));
+        mvc.perform(get(path)).andExpect(status().isUnauthorized());
         mvc.perform(get(path).header("Authorization", "Bearer " + token("wrong-issuer"))).andExpect(status().isUnauthorized());
         String authorization = "Bearer " + token("architecture-test");
         mvc.perform(get(path).header("Authorization", authorization)).andExpect(status().isOk())
-                .andExpect(jsonPath("$.referenceId").value(notification.getReferenceId().toString()))
+                .andExpect(jsonPath("$.referenceId").doesNotHaveJsonPath())
+                .andExpect(jsonPath("$.stockId").value(notification.getStockId().toString()))
                 .andExpect(jsonPath("$.type").value("LOW_STOCK"));
         mvc.perform(patch(path + "/read").header("Authorization", authorization)).andExpect(status().isOk())
                 .andExpect(jsonPath("$.read").value(true));
@@ -105,7 +108,13 @@ class NotificationArchitectureIntegrationTest {
 
     @Configuration
     @EnableWebMvc
-    @Import({NotificationController.class, SecurityConfig.class, JwtAuthFilter.class, NotificationExceptionHandler.class, CreateLowStockNotificationService.class, FindStockNotificationByIdService.class, FindServiceOrderNotificationByIdService.class, MarkStockNotificationAsReadService.class, MarkServiceOrderNotificationAsReadService.class, FindAllStockNotificationsService.class, FindUnreadStockNotificationsService.class, FindAllServiceOrderNotificationsService.class, FindUnreadServiceOrderNotificationsService.class})
+    @Import({NotificationController.class, SecurityConfig.class, JwtAuthFilter.class,
+            OfisyAuthenticationEntryPoint.class, OfisyAccessDeniedHandler.class, NotificationExceptionHandler.class,
+            CreateLowStockNotificationService.class, FindStockNotificationByIdService.class,
+            FindServiceOrderNotificationByIdService.class, MarkStockNotificationAsReadService.class,
+            MarkServiceOrderNotificationAsReadService.class, FindAllStockNotificationsService.class,
+            FindUnreadStockNotificationsService.class, FindAllServiceOrderNotificationsService.class,
+            FindUnreadServiceOrderNotificationsService.class})
     static class TestConfiguration {
         @Bean(destroyMethod = "close")
         DynamoDbClient client() {

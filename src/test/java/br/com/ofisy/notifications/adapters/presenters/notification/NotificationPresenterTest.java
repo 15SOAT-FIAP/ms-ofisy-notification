@@ -16,15 +16,14 @@ class NotificationPresenterTest {
         notification.markAsRead();
         var cursor = "opaque-continuation-token";
         var response = NotificationPresenter.presentPage(new PaginatedResult<>(List.of(notification), cursor));
-        var item = response.getItems().getFirst();
+        var item = response.items().getFirst();
         assertThat(item.id()).isEqualTo(notification.getId());
-        assertThat(item.referenceId()).isEqualTo(notification.getQuoteId());
         assertThat(item.type()).isEqualTo("QUOTE_GENERATED");
         assertThat(item.message()).isEqualTo(notification.getMessage().getContent());
         assertThat(item.read()).isTrue();
         assertThat(item.createdAt()).isEqualTo(notification.getCreatedAt());
         assertThat(item.updatedAt()).isEqualTo(notification.getUpdatedAt());
-        assertThat(response.getNextToken()).isEqualTo(cursor);
-        assertThat(NotificationPresenter.presentPage(new PaginatedResult<>(List.of(), null)).getNextToken()).isNull();
+        assertThat(response.nextToken()).isEqualTo(cursor);
+        assertThat(NotificationPresenter.presentPage(new PaginatedResult<>(List.of(), null)).nextToken()).isNull();
     }
 }

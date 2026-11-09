@@ -52,3 +52,12 @@ endpoints de teste, pois a API REST é introduzida no PR seguinte. Cobre o forma
 da Lambda com chave distinta da de funcionário, GET/PATCH públicos, context path,
 query string, caminhos parecidos e a manutenção da proteção de estoque. O teste não
 substitui uma validação do Gateway implantado na AWS.
+
+## OpenAPI
+
+Com o ambiente local iniciado, acesse o Swagger UI em
+`http://localhost:18081/swagger-ui.html` e a especificação em
+`http://localhost:18081/v3/api-docs`. No Swagger UI, use **Authorize** para
+informar um JWT de funcionário com perfil ADMIN ou STOCKMAN e testar as rotas
+de estoque. As rotas de ordens de serviço não exigem Bearer diretamente no
+microsserviço. O Gateway aplica a autenticação de cliente quando publicado.

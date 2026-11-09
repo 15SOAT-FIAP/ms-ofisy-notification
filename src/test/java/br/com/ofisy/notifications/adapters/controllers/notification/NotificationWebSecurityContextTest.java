@@ -9,6 +9,8 @@ import br.com.ofisy.notifications.application.notification.findunreadstock.FindU
 import br.com.ofisy.notifications.application.notification.findallserviceorder.FindAllServiceOrderNotificationsService;
 import br.com.ofisy.notifications.application.notification.findunreadserviceorder.FindUnreadServiceOrderNotificationsService;
 import br.com.ofisy.notifications.config.SecurityConfig;
+import br.com.ofisy.notifications.config.security.OfisyAccessDeniedHandler;
+import br.com.ofisy.notifications.config.security.OfisyAuthenticationEntryPoint;
 import br.com.ofisy.notifications.domain.notification.Notification;
 import br.com.ofisy.notifications.domain.notification.NotificationRepository;
 import br.com.ofisy.notifications.domain.notification.NotificationType;
@@ -54,7 +56,12 @@ class NotificationWebSecurityContextTest {
 
     @Configuration
     @EnableWebMvc
-    @Import({NotificationController.class, SecurityConfig.class, JwtAuthFilter.class, FindStockNotificationByIdService.class, FindServiceOrderNotificationByIdService.class, MarkStockNotificationAsReadService.class, MarkServiceOrderNotificationAsReadService.class, FindAllStockNotificationsService.class, FindUnreadStockNotificationsService.class, FindAllServiceOrderNotificationsService.class, FindUnreadServiceOrderNotificationsService.class})
+    @Import({NotificationController.class, SecurityConfig.class, JwtAuthFilter.class,
+            OfisyAuthenticationEntryPoint.class, OfisyAccessDeniedHandler.class,
+            FindStockNotificationByIdService.class, FindServiceOrderNotificationByIdService.class,
+            MarkStockNotificationAsReadService.class, MarkServiceOrderNotificationAsReadService.class,
+            FindAllStockNotificationsService.class, FindUnreadStockNotificationsService.class,
+            FindAllServiceOrderNotificationsService.class, FindUnreadServiceOrderNotificationsService.class})
     static class TestConfiguration {
         @Bean
         NotificationRepository repository() {
