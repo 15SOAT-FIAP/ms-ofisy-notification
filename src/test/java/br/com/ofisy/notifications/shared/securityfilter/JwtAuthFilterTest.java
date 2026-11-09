@@ -13,7 +13,6 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.core.context.SecurityContextHolder;
 
-import java.io.PrintWriter;
 import io.jsonwebtoken.security.WeakKeyException;
 import java.util.Date;
 import java.util.List;
@@ -42,9 +41,6 @@ class JwtAuthFilterTest {
 
     @Mock
     private FilterChain filterChain;
-
-    @Mock
-    private PrintWriter printWriter;
 
     private String validToken;
 
@@ -103,10 +99,9 @@ class JwtAuthFilterTest {
 
     private void assertRejected(String token) throws Exception {
         when(request.getHeader("Authorization")).thenReturn("Bearer " + token);
-        when(response.getWriter()).thenReturn(printWriter);
         filter.doFilterInternal(request, response, filterChain);
-        verify(response).setStatus(HttpServletResponse.SC_UNAUTHORIZED);
-        verify(filterChain, never()).doFilter(request, response);
+        verifyNoInteractions(response);
+        verify(filterChain).doFilter(request, response);
         assertNull(SecurityContextHolder.getContext().getAuthentication());
     }
 
@@ -142,7 +137,7 @@ class JwtAuthFilterTest {
             assertRejected(Jwts.builder().subject("employee").issuer(ISSUER).claim("role", role)
                     .expiration(new Date(System.currentTimeMillis() + 60_000))
                     .signWith(Keys.hmacShaKeyFor(SECRET.getBytes(StandardCharsets.UTF_8))).compact());
-            clearInvocations(request, response, filterChain, printWriter);
+            clearInvocations(request, response, filterChain);
         }
         assertRejected(Jwts.builder().subject("employee").issuer(ISSUER).claim("roles", List.of("ROLE_ADMIN"))
                 .expiration(new Date(System.currentTimeMillis() + 60_000))
@@ -154,7 +149,7 @@ class JwtAuthFilterTest {
         assertRejected(Jwts.builder().issuer(ISSUER).claim("role", "ADMIN")
                 .expiration(new Date(System.currentTimeMillis() + 60_000))
                 .signWith(Keys.hmacShaKeyFor(SECRET.getBytes(StandardCharsets.UTF_8))).compact());
-        clearInvocations(request, response, filterChain, printWriter);
+        clearInvocations(request, response, filterChain);
         assertRejected(Jwts.builder().subject("employee").issuer(ISSUER).claim("role", "ADMIN")
                 .signWith(Keys.hmacShaKeyFor(SECRET.getBytes(StandardCharsets.UTF_8))).compact());
     }
@@ -172,12 +167,11 @@ class JwtAuthFilterTest {
     @Test
     void testInvalidToken() throws Exception {
         when(request.getHeader("Authorization")).thenReturn("Bearer invalid_token");
-        when(response.getWriter()).thenReturn(printWriter);
 
         filter.doFilterInternal(request, response, filterChain);
 
-        verify(response).setStatus(HttpServletResponse.SC_UNAUTHORIZED);
-        verify(filterChain, never()).doFilter(request, response);
+        verifyNoInteractions(response);
+        verify(filterChain).doFilter(request, response);
         assertNull(SecurityContextHolder.getContext().getAuthentication());
     }
 }

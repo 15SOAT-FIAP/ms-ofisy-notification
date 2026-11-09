@@ -60,3 +60,12 @@ substitui uma validação do Gateway implantado na AWS.
 QuoteCreated não cria notificação de orçamento. A criação de orçamento ocorre pela entrada idempotente de evento; execute(command) de orçamento e a mensagem legada de orçamento gerado foram descomissionados. O tipo interno QUOTE_GENERATED permanece igual. Para subir LocalStack, publicar cenários e executar a integração, consulte [dev/integration/README.md](dev/integration/README.md). O filtro da assinatura SNS na AWS deve ser alinhado na infraestrutura responsável; o bootstrap local não altera a conta AWS.
 
 O teste [NotificationEventListenerIT](src/test/java/br/com/ofisy/notifications/adapters/listeners/notification/NotificationEventListenerIT.java) sobe SNS/SQS/DynamoDB automaticamente com Testcontainers, publica mensagens e verifica os efeitos do listener real. Ele roda em `mvn verify` pelo Failsafe e exige Docker, sem depender de uma fila AWS ou do ambiente Compose já aberto. A documentação de integração explica os cenários e como executar a suíte inteira sem skips.
+
+## OpenAPI
+
+Com o ambiente local iniciado, acesse o Swagger UI em
+`http://localhost:18081/swagger-ui.html` e a especificação em
+`http://localhost:18081/v3/api-docs`. No Swagger UI, use **Authorize** para
+informar um JWT de funcionário com perfil ADMIN ou STOCKMAN e testar as rotas
+de estoque. As rotas de ordens de serviço não exigem Bearer diretamente no
+microsserviço. O Gateway aplica a autenticação de cliente quando publicado.

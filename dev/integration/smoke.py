@@ -13,9 +13,12 @@ import boto3
 from botocore.config import Config
 from events import assert_quote_subscription
 
-BASE = "http://app:8081/api/v1/notifications"
+ORIGIN = "http://app:8081"
+API_PATH = "/api/v1/notifications"
+BASE = ORIGIN + API_PATH
 SECRET = os.environ["JWT_SECRET"]
 ISSUER = os.environ["APP_JWT_ISSUER"]
+NOTIFICATION_FIELDS = {"id", "type", "stockId", "quoteId", "message", "read", "createdAt", "updatedAt"}
 
 
 def encode(value):
@@ -51,11 +54,42 @@ def eventually(operation, description):
     raise AssertionError("Timeout: " + description)
 
 
+def check_openapi():
+    with urllib.request.urlopen(ORIGIN + "/swagger-ui.html", timeout=5) as response:
+        assert response.status == 200 and b"Swagger UI" in response.read()
+    with urllib.request.urlopen(ORIGIN + "/v3/api-docs/swagger-config", timeout=5) as response:
+        assert json.load(response)["url"] == "/v3/api-docs"
+    with urllib.request.urlopen(ORIGIN + "/v3/api-docs", timeout=10) as response:
+        document = json.load(response)
+    paths = document["paths"]
+    components = document["components"]
+    bearer = components["securitySchemes"]["BearerToken"]
+    assert (bearer["type"], bearer["scheme"], bearer["bearerFormat"]) == ("http", "bearer", "JWT")
+    assert not document.get("security")
+    for category in ("stock", "service-orders"):
+        for suffix, method in (("", "get"), ("/unread", "get"), ("/{id}", "get"), ("/{id}/read", "patch")):
+            operation = paths[f"{API_PATH}/{category}{suffix}"][method]
+            responses = operation["responses"]
+            assert "content" in responses["200"]
+            assert ("404" if "{id}" in suffix else "400") in responses
+            if category == "stock":
+                assert operation["security"] == [{"BearerToken": []}]
+                assert {"401", "403"} <= responses.keys()
+            else:
+                assert not operation.get("security")
+    schemas = components["schemas"]
+    assert set(schemas["NotificationResponseDTO"]["properties"]) == NOTIFICATION_FIELDS
+    page = paths[API_PATH + "/stock"]["get"]["responses"]["200"]
+    page_ref = next(iter(page["content"].values()))["schema"]["$ref"]
+    assert set(schemas[page_ref.rsplit("/", 1)[-1]]["properties"]) == {"items", "nextToken"}
+
+
 def main():
     assert_quote_subscription()
     admin = token()
     eventually(lambda: request("/stock", jwt=admin)[0] == 200, "API startup")
-    assert request("/stock")[0] in (401, 403), "Anonymous stock access was allowed"
+    check_openapi()
+    assert request("/stock")[0] == 401
     assert request("/stock", jwt=token(issuer="wrong-issuer"))[0] == 401
     assert request("/stock", jwt=token(role="MECHANIC"))[0] == 403
     assert request("/stock", jwt=token(role="STOCKMAN"))[0] == 200
@@ -79,6 +113,7 @@ def main():
     send(event)
     eventually(lambda: request("/stock/" + event_id, jwt=admin)[0] == 200, "StockLow consumption")
     stock_record = request("/stock/" + event_id, jwt=admin)[1]
+    assert set(stock_record) == NOTIFICATION_FIELDS
     assert stock_record["stockId"] == event["payload"]["stockId"] and stock_record["quoteId"] is None
     assert stock_record["message"] == "Estoque baixo para Radiador smoke test. Quantidade atual: 2. Mínimo: 10"
     assert request("/service-orders/" + event_id)[0] == 404
@@ -98,6 +133,7 @@ def main():
     status, after = request("/stock/" + event_id, jwt=admin)
     assert status == 200 and after["read"] and after["updatedAt"] == marked["updatedAt"]
     item = ddb.get_item(TableName="Notifications", Key={"id": {"S": event_id}}, ConsistentRead=True)["Item"]
+    assert item["referenceId"]["S"] == stock_record["stockId"]
     assert item["read"]["BOOL"] is True
     stock = request("/stock?limit=10", jwt=admin)[1]
     assert any(n["id"] == event_id for n in stock["items"])
@@ -123,6 +159,7 @@ def main():
     assert not any(n["quoteId"] == failed_created["payload"]["quoteId"] for n in request("/service-orders")[1]["items"])
     quote_path = "/service-orders/" + quote["eventId"]
     quote_record = request(quote_path)[1]
+    assert set(quote_record) == NOTIFICATION_FIELDS
     assert quote_record["quoteId"] == quote["payload"]["quoteId"] and quote_record["stockId"] is None
     assert quote_record["message"] == "Orçamento #{} disponível para aprovação na ordem de serviço '{}'. Valor total: R$ 123.45".format(quote["payload"]["quoteId"], quote["serviceOrderId"])
     assert request("/stock/" + quote["eventId"], jwt=admin)[0] == 404
@@ -169,6 +206,7 @@ def main():
                 query = "?limit=1" + ("&nextToken=" + urllib.parse.quote(cursor, safe="") if cursor else "")
                 status, page = request(route + query, jwt=admin)
                 assert status == 200
+                assert set(page) == {"items", "nextToken"}
                 seen.extend(n["id"] for n in page["items"])
                 cursor = page["nextToken"]
                 if cursor is None:
@@ -232,7 +270,8 @@ def main():
         "StockLow consumption", "PATCH read", "redelivery preserves read and updatedAt", "DynamoDB persistence",
         "TypeIndex listing", "QuoteSentForApproval consumption without SNS attributes", "QuoteCreated filtered and ignored when delivered directly", "stock failure without approval creates no quote notification", "invalid approval event retry, DLQ and replay", "core message and DTO fields", "wrong-type GET/PATCH 404 both directions",
         "wrong-type PATCH preserves state", "missing-id GET/PATCH 404 both categories", "core public quote read route",
-        "quote redelivery preserves read and updatedAt", "both unread lists reflect read state", "all four HTTP routes paginate without missing or duplicate records"], "stockNotificationId": event_id,
+        "quote redelivery preserves read and updatedAt", "both unread lists reflect read state", "all four HTTP routes paginate without missing or duplicate records",
+        "Swagger UI and eight OpenAPI operations", "OpenAPI Bearer requirements and HTTP response schemas"], "stockNotificationId": event_id,
         "quoteNotificationId": quote["eventId"]}, indent=2), flush=True)
 
 
