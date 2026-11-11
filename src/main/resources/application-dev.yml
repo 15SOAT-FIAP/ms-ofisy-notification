@@ -1,0 +1,17 @@
+# Explicit opt-in local profile; these credentials are only for LocalStack.
+spring:
+  cloud:
+    aws:
+      region:
+        static: us-east-1
+      credentials:
+        access-key: test
+        secret-key: test
+      sqs:
+        endpoint: ${LOCALSTACK_ENDPOINT:http://localhost:14566}
+      dynamodb:
+        endpoint: ${LOCALSTACK_ENDPOINT:http://localhost:14566}
+app:
+  jwt:
+    secret: ${APP_JWT_SECRET:local-development-only-secret-at-least-32-bytes}
+    issuer: techchallenge-ofisy-api

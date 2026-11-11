@@ -7,6 +7,9 @@ public interface NotificationRepository {
 
     Notification save(Notification notification);
 
+    /** Inserts a new event notification atomically; false means the id already exists. */
+    boolean createIfAbsent(Notification notification);
+
     Optional<Notification> findById(UUID id);
 
     /** Cursor opaco: interpretação e formato pertencem ao adapter de persistência. */

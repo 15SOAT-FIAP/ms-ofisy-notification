@@ -8,6 +8,9 @@ public interface CreateQuoteNotificationUseCase {
 
     Notification execute(CreateQuoteCommand command);
 
+    /** Event-consumption extension: eventId is the atomic deduplication key. */
+    boolean executeEvent(UUID eventId, CreateQuoteCommand command);
+
     record CreateQuoteCommand(
             UUID quoteId,
             UUID serviceOrderId,
