@@ -89,8 +89,8 @@ class NotificationArchitectureIntegrationTest {
         assertThat(stored.isRead()).isTrue();
         assertThat(stored.getUpdatedAt()).isEqualTo(read.getUpdatedAt());
         String wrong="/api/v1/notifications/service-orders/"+notification.getId();
-        mvc.perform(get(wrong)).andExpect(status().isNotFound());
-        mvc.perform(patch(wrong+"/read")).andExpect(status().isNotFound());
+        mvc.perform(get(wrong)).andExpect(status().isUnauthorized());
+        mvc.perform(patch(wrong+"/read")).andExpect(status().isUnauthorized());
         var quote=Notification.create(UUID.randomUUID(),NotificationType.QUOTE_GENERATED,"Orçamento",UUID.randomUUID());
         repository.save(quote);
         mvc.perform(get("/api/v1/notifications/stock/"+quote.getId()).header("Authorization",authorization)).andExpect(status().isNotFound());

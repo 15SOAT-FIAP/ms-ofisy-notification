@@ -17,17 +17,10 @@ public class FindServiceOrderNotificationByIdService implements FindServiceOrder
     }
 
     @Override
-    public Notification execute(UUID id) {
-        Notification notification = notificationRepository.findById(id)
+    public Notification execute(UUID id, UUID customerId) {
+        return notificationRepository.findById(id)
+                .filter(notification -> notification.getType() == NotificationType.QUOTE_GENERATED)
+                .filter(notification -> customerId.equals(notification.getCustomerId()))
                 .orElseThrow(() -> new NotificationNotFoundException(id));
-
-        // Mesmo raciocinio do lado de estoque, espelhado: tipo errado vira
-        // "nao encontrada", nao revela a existencia de notificacoes de
-        // estoque pra quem so tem acesso as de OS.
-        if (notification.getType() != NotificationType.QUOTE_GENERATED) {
-            throw new NotificationNotFoundException(id);
-        }
-
-        return notification;
     }
 }

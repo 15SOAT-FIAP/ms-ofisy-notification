@@ -19,22 +19,28 @@ BASE = ORIGIN + API_PATH
 SECRET = os.environ["JWT_SECRET"]
 ISSUER = os.environ["APP_JWT_ISSUER"]
 NOTIFICATION_FIELDS = {"id", "type", "stockId", "quoteId", "message", "read", "createdAt", "updatedAt"}
+CUSTOMER_ID = "00000000-0000-4000-8000-000000000001"
 
 
 def encode(value):
     return base64.urlsafe_b64encode(json.dumps(value, separators=(",", ":")).encode()).rstrip(b"=").decode()
 
 
-def token(issuer=ISSUER, secret=SECRET, role="ADMIN"):
-    content = encode({"alg": "HS256", "typ": "JWT"}) + "." + encode({
-        "sub": "local-tester", "iss": issuer, "role": role,
-        "iat": int(time.time()), "exp": int(time.time()) + 3600})
+def token(issuer=ISSUER, secret=SECRET, role="ADMIN", subject="local-tester"):
+    claims = {"sub": subject, "iss": issuer, "iat": int(time.time()), "exp": int(time.time()) + 3600}
+    if role is not None:
+        claims["role"] = role
+    content = encode({"alg": "HS256", "typ": "JWT"}) + "." + encode(claims)
     signature = hmac.new(secret.encode(), content.encode(), hashlib.sha256).digest()
     return content + "." + base64.urlsafe_b64encode(signature).rstrip(b"=").decode()
 
 
 def request(path, method="GET", jwt=None):
-    headers = {"Authorization": "Bearer " + jwt} if jwt else {}
+    if path.startswith("/service-orders"):
+        headers = {"Authorization": "Bearer " + token(issuer="techchallenge-ofisy-auth", role=None, subject=CUSTOMER_ID),
+                   "X-Customer-Id": CUSTOMER_ID}
+    else:
+        headers = {"Authorization": "Bearer " + jwt} if jwt else {}
     try:
         with urllib.request.urlopen(urllib.request.Request(BASE + path, headers=headers, method=method), timeout=4) as response:
             return response.status, json.loads(response.read())
@@ -76,7 +82,7 @@ def check_openapi():
                 assert operation["security"] == [{"BearerToken": []}]
                 assert {"401", "403"} <= responses.keys()
             else:
-                assert not operation.get("security")
+                assert operation["security"] == [{"BearerToken": []}]
     schemas = components["schemas"]
     assert set(schemas["NotificationResponseDTO"]["properties"]) == NOTIFICATION_FIELDS
     page = paths[API_PATH + "/stock"]["get"]["responses"]["200"]
@@ -153,7 +159,7 @@ def main():
     sqs.send_message(QueueUrl=queue, MessageBody=json.dumps(direct_created),
                      MessageGroupId=quote["serviceOrderId"], MessageDeduplicationId=direct_created["eventId"])
     send(quote)  # Positive control with the same OS group, without SNS message attributes.
-    eventually(lambda: any(n["id"] == quote["eventId"] for n in request("/service-orders")[1]["items"]), "QuoteSentForApproval public listing")
+    eventually(lambda: any(n["id"] == quote["eventId"] for n in request("/service-orders")[1]["items"]), "QuoteSentForApproval customer listing")
     for ignored_event in (premature, failed_created, stock_failure, direct_created):
         assert "Item" not in ddb.get_item(TableName="Notifications", Key={"id": {"S": ignored_event["eventId"]}}, ConsistentRead=True)
     assert not any(n["quoteId"] == failed_created["payload"]["quoteId"] for n in request("/service-orders")[1]["items"])
@@ -269,7 +275,7 @@ def main():
     print(json.dumps({"status": "PASS", "checks": ["SNS FIFO to SQS FIFO with raw envelope", "SNS type filter", "invalid payload retry and DLQ", "independent group progress", "manual DLQ repair and replay", "JWT issuer", "JWT signature", "core employee role contract", "pagination validation", "anonymous stock denied",
         "StockLow consumption", "PATCH read", "redelivery preserves read and updatedAt", "DynamoDB persistence",
         "TypeIndex listing", "QuoteSentForApproval consumption without SNS attributes", "QuoteCreated filtered and ignored when delivered directly", "stock failure without approval creates no quote notification", "invalid approval event retry, DLQ and replay", "core message and DTO fields", "wrong-type GET/PATCH 404 both directions",
-        "wrong-type PATCH preserves state", "missing-id GET/PATCH 404 both categories", "core public quote read route",
+        "wrong-type PATCH preserves state", "missing-id GET/PATCH 404 both categories", "authenticated quote read route",
         "quote redelivery preserves read and updatedAt", "both unread lists reflect read state", "all four HTTP routes paginate without missing or duplicate records",
         "Swagger UI and eight OpenAPI operations", "OpenAPI Bearer requirements and HTTP response schemas"], "stockNotificationId": event_id,
         "quoteNotificationId": quote["eventId"]}, indent=2), flush=True)

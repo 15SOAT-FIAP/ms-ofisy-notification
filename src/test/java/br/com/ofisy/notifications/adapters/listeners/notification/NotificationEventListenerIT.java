@@ -5,6 +5,9 @@ import br.com.ofisy.notifications.application.notification.markserviceorderasrea
 import br.com.ofisy.notifications.domain.notification.Notification;
 import br.com.ofisy.notifications.domain.notification.NotificationRepository;
 import br.com.ofisy.notifications.domain.notification.NotificationType;
+import br.com.ofisy.notifications.application.notification.createquote.ServiceOrderCustomerLookup;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -77,6 +80,14 @@ class NotificationEventListenerIT {
     private static String dlq;
     private static String billingTopic;
     private static String stockTopic;
+
+    private static final UUID CUSTOMER = UUID.randomUUID();
+    @MockitoBean private ServiceOrderCustomerLookup customerLookup;
+
+    @BeforeEach
+    void configureCustomerLookup() {
+        org.mockito.Mockito.when(customerLookup.findCustomerId(org.mockito.ArgumentMatchers.any())).thenReturn(CUSTOMER);
+    }
 
     @Autowired private NotificationRepository repository;
     @Autowired private MarkServiceOrderNotificationAsReadUseCase markAsRead;
@@ -192,7 +203,7 @@ class NotificationEventListenerIT {
         var quoteId = UUID.randomUUID();
         send(APPROVAL, eventId, orderId, quotePayload(quoteId));
         received(eventId);
-        markAsRead.execute(new MarkAsReadCommand(eventId));
+        markAsRead.execute(new MarkAsReadCommand(eventId, CUSTOMER));
         var before = repository.findById(eventId).orElseThrow();
 
         send(APPROVAL, eventId, orderId, quotePayload(quoteId));

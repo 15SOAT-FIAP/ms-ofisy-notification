@@ -9,6 +9,14 @@ TABLE = "Notifications"
 QUEUE = "ofisy-notification.fifo"
 ENDPOINT = os.environ.get("LOCALSTACK_ENDPOINT", "http://localstack:4566")
 CONFIG = Config(connect_timeout=2, read_timeout=3, retries={"max_attempts": 1})
+CUSTOMER_INDEX = {
+    "IndexName": "CustomerIdIndex",
+    "KeySchema": [
+        {"AttributeName": "customerId", "KeyType": "HASH"},
+        {"AttributeName": "createdAt", "KeyType": "RANGE"},
+    ],
+    "Projection": {"ProjectionType": "ALL"},
+}
 
 
 def wait_for(operation, label):
@@ -29,16 +37,25 @@ def main():
         ddb.create_table(
             TableName=TABLE, BillingMode="PAY_PER_REQUEST",
             AttributeDefinitions=[{"AttributeName": n, "AttributeType": "S"}
-                                  for n in ("id", "type", "createdAt", "referenceId")],
+                                  for n in ("id", "type", "createdAt", "referenceId", "customerId")],
             KeySchema=[{"AttributeName": "id", "KeyType": "HASH"}],
             GlobalSecondaryIndexes=[
+                CUSTOMER_INDEX,
                 {"IndexName": "TypeIndex", "KeySchema": [
                     {"AttributeName": "type", "KeyType": "HASH"},
                     {"AttributeName": "createdAt", "KeyType": "RANGE"}], "Projection": {"ProjectionType": "ALL"}},
                 {"IndexName": "ReferenceIdIndex", "KeySchema": [
                     {"AttributeName": "referenceId", "KeyType": "HASH"}], "Projection": {"ProjectionType": "ALL"}},
             ])
-    wait_for(lambda: ddb.describe_table(TableName=TABLE), "Notifications table")
+    ddb.get_waiter("table_exists").wait(TableName=TABLE, WaiterConfig={"Delay": 1, "MaxAttempts": 90})
+    indexes = ddb.describe_table(TableName=TABLE)["Table"].get("GlobalSecondaryIndexes", [])
+    if not any(index["IndexName"] == CUSTOMER_INDEX["IndexName"] for index in indexes):
+        ddb.update_table(
+            TableName=TABLE,
+            AttributeDefinitions=[{"AttributeName": n, "AttributeType": "S"} for n in ("customerId", "createdAt")],
+            GlobalSecondaryIndexUpdates=[{"Create": CUSTOMER_INDEX}],
+        )
+        ddb.get_waiter("table_exists").wait(TableName=TABLE, WaiterConfig={"Delay": 1, "MaxAttempts": 90})
     dlq = sqs.create_queue(QueueName="ofisy-notification-dlq.fifo", Attributes={"FifoQueue": "true"})["QueueUrl"]
     dlq_arn = sqs.get_queue_attributes(QueueUrl=dlq, AttributeNames=["QueueArn"])["Attributes"]["QueueArn"]
     queue = sqs.create_queue(QueueName=QUEUE, Attributes={

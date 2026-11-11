@@ -25,6 +25,11 @@ services:
     depends_on:
       localstack:
         condition: service_healthy
+  core-fixture:
+    build:
+      context: .
+      dockerfile: Dockerfile.tools
+    command: ["python", "/tools/core_fixture.py"]
   app:
     build: ../..
     ports: ["127.0.0.1:18081:8081"]
@@ -41,7 +46,11 @@ services:
       AWS_EC2_METADATA_DISABLED: "true"
       JWT_SECRET: ${JWT_SECRET:-local-development-only-secret-at-least-32-bytes}
       APP_JWT_ISSUER: techchallenge-ofisy-api
+      APP_CORE_BASE_URL: http://core-fixture:8080
+      APP_CORE_SERVICE_TOKEN: local-fixture-only
     depends_on:
+      core-fixture:
+        condition: service_started
       bootstrap:
         condition: service_completed_successfully
   smoke:

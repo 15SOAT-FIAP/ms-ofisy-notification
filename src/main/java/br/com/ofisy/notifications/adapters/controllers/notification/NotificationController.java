@@ -34,8 +34,8 @@ public class NotificationController implements NotificationApi {
         return ResponseEntity.ok(NotificationPresenter.present(findStockNotificationByIdUseCase.execute(id)));
     }
     @Override
-    public ResponseEntity<NotificationResponseDTO> findServiceOrderById(UUID id) {
-        return ResponseEntity.ok(NotificationPresenter.present(findServiceOrderNotificationByIdUseCase.execute(id)));
+    public ResponseEntity<NotificationResponseDTO> findServiceOrderById(UUID id, UUID customerId) {
+        return ResponseEntity.ok(NotificationPresenter.present(findServiceOrderNotificationByIdUseCase.execute(id, customerId)));
     }
     @Override
     @PreAuthorize("hasAnyRole('ADMIN','STOCKMAN')")
@@ -43,8 +43,8 @@ public class NotificationController implements NotificationApi {
         return ResponseEntity.ok(NotificationPresenter.present(markStockNotificationAsReadUseCase.execute(new MarkStockNotificationAsReadUseCase.MarkAsReadCommand(id))));
     }
     @Override
-    public ResponseEntity<NotificationResponseDTO> markServiceOrderAsRead(UUID id) {
-        return ResponseEntity.ok(NotificationPresenter.present(markServiceOrderNotificationAsReadUseCase.execute(new MarkServiceOrderNotificationAsReadUseCase.MarkAsReadCommand(id))));
+    public ResponseEntity<NotificationResponseDTO> markServiceOrderAsRead(UUID id, UUID customerId) {
+        return ResponseEntity.ok(NotificationPresenter.present(markServiceOrderNotificationAsReadUseCase.execute(new MarkServiceOrderNotificationAsReadUseCase.MarkAsReadCommand(id, customerId))));
     }
     @Override
     @PreAuthorize("hasAnyRole('ADMIN','STOCKMAN')")
@@ -59,14 +59,14 @@ public class NotificationController implements NotificationApi {
         return ResponseEntity.ok(NotificationPresenter.presentPage(findUnreadStockNotificationsUseCase.execute(limit, nextToken)));
     }
     @Override
-    public ResponseEntity<PaginatedResponseDTO<NotificationResponseDTO>> findAllServiceOrders(int limit,String nextToken) {
+    public ResponseEntity<PaginatedResponseDTO<NotificationResponseDTO>> findAllServiceOrders(UUID customerId, int limit,String nextToken) {
         validateLimit(limit);
-        return ResponseEntity.ok(NotificationPresenter.presentPage(findAllServiceOrderNotificationsUseCase.execute(limit, nextToken)));
+        return ResponseEntity.ok(NotificationPresenter.presentPage(findAllServiceOrderNotificationsUseCase.execute(customerId, limit, nextToken)));
     }
     @Override
-    public ResponseEntity<PaginatedResponseDTO<NotificationResponseDTO>> findUnreadServiceOrders(int limit,String nextToken) {
+    public ResponseEntity<PaginatedResponseDTO<NotificationResponseDTO>> findUnreadServiceOrders(UUID customerId, int limit,String nextToken) {
         validateLimit(limit);
-        return ResponseEntity.ok(NotificationPresenter.presentPage(findUnreadServiceOrderNotificationsUseCase.execute(limit, nextToken)));
+        return ResponseEntity.ok(NotificationPresenter.presentPage(findUnreadServiceOrderNotificationsUseCase.execute(customerId, limit, nextToken)));
     }
     private static void validateLimit(int limit) {
         if (limit < 1 || limit > 100) {

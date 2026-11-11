@@ -33,24 +33,18 @@ Defina `APP_JWT_ISSUER` com o issuer exato do token de funcionário emitido pelo
 (padrão `techchallenge-ofisy-api`). O filtro valida assinatura, emissor, expiração,
 subject e a claim `role` singular antes de converter o perfil em uma autoridade Spring.
 
-As rotas `/api/v1/notifications/service-orders` e seus subcaminhos preservam o contrato
-público do core no serviço. A autenticação do cliente é responsabilidade do API Gateway
-e de seu Lambda Authorizer (ADR-0006/ADR-0010). O token da Lambda tem issuer
-`techchallenge-ofisy-auth`, subject com o customerId e não contém perfil de funcionário;
-por isso, o filtro de funcionário não o interpreta nessas rotas. Um mesmo matcher é
-usado na autorização HTTP e na exclusão do filtro, respeitando os limites do caminho
-e o context path. Caminhos como `service-orders-admin` não são incluídos.
+Nas quatro rotas de ordem de serviço, o Gateway sobrescreve `X-Customer-Id` com a
+identidade autenticada pelo Lambda Authorizer. O Notification valida o JWT de cliente
+emitido por `techchallenge-ofisy-auth` e confere se o subject coincide com o header.
+Configure `APP_JWT_CUSTOMER_SECRET` se a Lambda usar uma chave distinta de `JWT_SECRET`.
+As listagens e os cursores ficam restritos ao cliente. Consulta por ID e marcação de
+leitura retornam `404` quando a notificação pertence a outra pessoa. As rotas de estoque
+exigem JWT de funcionário com perfil ADMIN ou STOCKMAN.
 
-O serviço não passa a validar localmente o JWT de cliente nem a extrair permissões de
-funcionário dele. No deploy, essas rotas devem ser expostas pela fronteira autenticada
-do Gateway; a aplicação não deve ganhar uma entrada pública alternativa que contorne
-o authorizer. As rotas de estoque exigem JWT de funcionário com perfil ADMIN ou STOCKMAN.
-
-`JwtCustomerRoutesIntegrationTest` exercita a cadeia real de segurança com MockMvc e
-endpoints de teste. Cobre o formato HS256
-da Lambda com chave distinta da de funcionário, GET/PATCH públicos, context path,
-query string, caminhos parecidos e a manutenção da proteção de estoque. O teste não
-substitui uma validação do Gateway implantado na AWS.
+Ao consumir `QuoteSentForApproval`, o serviço resolve o cliente da OS pelo Core.
+Configure `APP_CORE_BASE_URL` e `APP_CORE_SERVICE_TOKEN` para usar a rota autenticada
+`GET /api/v1/service-orders/{id}/customer`. O Compose independente usa uma fixture
+de Core. Para registros anteriores, consulte o [guia de backfill](dev/integration/README.md#backfill-de-titularidade).
 
 ## Eventos consumidos e ambiente local
 
@@ -67,5 +61,5 @@ Com o ambiente local iniciado, acesse o Swagger UI em
 `http://localhost:18081/swagger-ui.html` e a especificação em
 `http://localhost:18081/v3/api-docs`. No Swagger UI, use **Authorize** para
 informar um JWT de funcionário com perfil ADMIN ou STOCKMAN e testar as rotas
-de estoque. As rotas de ordens de serviço não exigem Bearer diretamente no
-microsserviço. O Gateway aplica a autenticação de cliente quando publicado.
+de estoque. Para ordens de serviço, faça a chamada pela integração do Gateway
+com um JWT de cliente. O Gateway injeta o header de identidade.

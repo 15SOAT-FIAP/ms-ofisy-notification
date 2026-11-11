@@ -21,7 +21,11 @@ Comandos de cenários: `make dev-stock`, `make dev-quote` (QuoteSentForApproval)
 
 ## API e contrato do core
 
-JWT de funcionário segue o core: `iss=techchallenge-ofisy-api`, `sub` com o usuário, `role` singular (ADMIN, STOCKMAN, ATTENDANT ou MECHANIC), assinatura e expiração válidas. Estoque exige ADMIN/STOCKMAN. As rotas de notificações de OS mantêm o acesso público anterior, inclusive PATCH; qualquer mudança nessa política exige decisão separada. O segredo local padrão é público e exclusivo de desenvolvimento.
+O JWT de funcionário segue o Core, com issuer `techchallenge-ofisy-api`, subject do
+usuário e claim `role` singular. Estoque exige ADMIN ou STOCKMAN. As quatro rotas de
+notificação de OS exigem um JWT de cliente e o `X-Customer-Id` encaminhado pelo
+Gateway. No smoke isolado, o Core é representado pelo serviço `core-fixture`. Os
+tokens e segredos usados pelo Compose são exclusivos de desenvolvimento.
 
 As quatro listagens mantêm `limit=50` como padrão e agora aceitam somente 1–100. Entrada inválida retorna HTTP 400 com ProblemDetail. O `nextToken` é opaco, versionado e específico da categoria e do filtro (todas/não lidas); tokens antigos, malformados ou de outra consulta retornam 400, em vez de reiniciar silenciosamente na primeira página. Essa é uma mudança deliberada de contrato antes de produção. Páginas vazias com nextToken continuam possíveis para consultas filtradas; percorra até nextToken ser null.
 
@@ -62,3 +66,15 @@ O bootstrap aceita LOCALSTACK_ENDPOINT para o hook de inicialização interno do
 Depois de `mvn clean verify` e do gate dos relatórios, o CI aplica também `compose.ci.yml`. Esse override usa `Dockerfile.ci` para copiar o JAR já validado para a mesma base Java 21 JRE e usuário sem privilégios do runtime habitual, sem baixar dependências Maven ou compilar novamente. O ignore específico desse Dockerfile envia somente `target/*.jar` como contexto de aplicação. Todos os testes, cobertura e cenários do smoke continuam obrigatórios.
 
 O Compose de desenvolvimento continua compilando a partir dos fontes pelo Dockerfile principal. Para reproduzir o smoke do CI após a validação Maven, use `docker compose -f dev/integration/compose.yml -f dev/integration/compose.ci.yml up -d --build app`, seguido de `docker compose -f dev/integration/compose.yml -f dev/integration/compose.ci.yml run --rm --build --no-deps smoke`, em ambiente limpo.
+
+## Backfill de titularidade
+
+`backfill_customer.py` processa notificações de orçamento que já estão no DynamoDB e
+ainda não têm dono. Usa o `serviceOrderId` armazenado ou consulta o orçamento no Billing
+para descobri-lo. Em seguida, resolve o dono no Core e preenche apenas os campos de
+titularidade. Registros sem associação comprovada ficam indisponíveis nas rotas de cliente.
+
+Execute com Python e boto3. Configure `CORE_BASE_URL`, `BILLING_BASE_URL` e
+`CORE_SERVICE_TOKEN`. Use `BILLING_SERVICE_TOKEN` se o Billing exigir outro token e
+`DYNAMODB_ENDPOINT` para o LocalStack. A execução padrão só relata o que pode ser
+resolvido. Passe `--apply` para gravar após conferir o relatório.

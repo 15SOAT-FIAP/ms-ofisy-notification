@@ -18,4 +18,8 @@ public interface NotificationRepository {
 
     /** Notificações não lidas do tipo informado, mais recentes primeiro. */
     PaginatedResult<Notification> findUnreadByType(NotificationType type, int limit, String cursor);
+
+    PaginatedResult<Notification> findServiceOrdersByCustomer(UUID customerId, boolean unread, int limit, String cursor);
+
+    Optional<Notification> markServiceOrderAsRead(UUID id, UUID customerId);
 }

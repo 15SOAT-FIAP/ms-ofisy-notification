@@ -45,7 +45,7 @@ public class SecurityConfig {
                         .authenticationEntryPoint(authenticationEntryPoint)
                         .accessDeniedHandler(accessDeniedHandler))
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers(CUSTOMER_NOTIFICATIONS).permitAll()
+                        .requestMatchers(CUSTOMER_NOTIFICATIONS).hasRole("CUSTOMER")
                         .requestMatchers("/swagger-ui.html", "/swagger-ui/**",
                                 "/v3/api-docs", "/v3/api-docs/**", "/v3/api-docs.yaml").permitAll()
                         .requestMatchers("/actuator/**").permitAll() // If actuator is added later

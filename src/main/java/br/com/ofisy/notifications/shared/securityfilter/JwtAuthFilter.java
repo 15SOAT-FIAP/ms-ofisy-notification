@@ -21,16 +21,21 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Set;
+import java.util.UUID;
 
 @Component
 public class JwtAuthFilter extends OncePerRequestFilter {
 
     public static final String AUTHORIZATION = "Authorization";
     public static final String BEARER = "Bearer ";
+    public static final String CUSTOMER_ID_HEADER = "X-Customer-Id";
     private static final Set<String> EMPLOYEE_ROLES = Set.of("ADMIN", "ATTENDANT", "MECHANIC", "STOCKMAN");
 
     private final SecretKey secretKey;
     private final String issuer;
+
+    @Value("${app.jwt.customer-secret:${app.jwt.secret}}")
+    private String customerSecret;
 
     public JwtAuthFilter(@Value("${app.jwt.secret}") String secret,
                          @Value("${app.jwt.issuer:techchallenge-ofisy-api}") String issuer) {
@@ -45,12 +50,6 @@ public class JwtAuthFilter extends OncePerRequestFilter {
     }
 
     @Override
-    protected boolean shouldNotFilter(HttpServletRequest request) {
-        // Customer JWTs belong to the Gateway authorizer, not the employee identity/role contract.
-        return NotificationRequestMatchers.CUSTOMER_NOTIFICATIONS.matches(request);
-    }
-
-    @Override
     protected void doFilterInternal(HttpServletRequest request,
                                     HttpServletResponse response,
                                     FilterChain filterChain) throws ServletException, IOException {
@@ -62,9 +61,24 @@ public class JwtAuthFilter extends OncePerRequestFilter {
         }
 
         String token = authHeader.substring(BEARER.length());
+        boolean customerRoute = NotificationRequestMatchers.CUSTOMER_NOTIFICATIONS.matches(request);
 
         try {
-            Claims claims = Jwts.parser()
+            if (customerRoute) {
+                authenticateCustomer(request, token);
+            } else {
+                authenticateEmployee(request, token);
+            }
+        } catch (JwtException | IllegalArgumentException e) {
+            SecurityContextHolder.clearContext();
+            logger.warn("Invalid JWT for notification route");
+        }
+
+        filterChain.doFilter(request, response);
+    }
+
+    private void authenticateEmployee(HttpServletRequest request, String token) {
+        Claims claims = Jwts.parser()
                     .verifyWith(secretKey)
                     .requireIssuer(issuer)
                     .build()
@@ -77,22 +91,25 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                     || !(roleClaim instanceof String role) || !EMPLOYEE_ROLES.contains(role)) {
                 throw new IllegalArgumentException("Invalid employee token claims");
             }
-            {
-                var authorities = List.of(new SimpleGrantedAuthority("ROLE_" + role));
+        var authorities = List.of(new SimpleGrantedAuthority("ROLE_" + role));
+        var authentication = UsernamePasswordAuthenticationToken.authenticated(email, null, authorities);
+        authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+        SecurityContextHolder.getContext().setAuthentication(authentication);
+    }
 
-                UsernamePasswordAuthenticationToken authentication =
-                        new UsernamePasswordAuthenticationToken(email, null, authorities);
-
-                authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
-
-                SecurityContextHolder.getContext().setAuthentication(authentication);
-            }
-        } catch (JwtException | IllegalArgumentException e) {
-            SecurityContextHolder.clearContext();
-            logger.warn("Invalid employee JWT");
+    private void authenticateCustomer(HttpServletRequest request, String token) {
+        var key = customerSecret == null ? secretKey
+                : Keys.hmacShaKeyFor(customerSecret.getBytes(StandardCharsets.UTF_8));
+        Claims claims = Jwts.parser().verifyWith(key).requireIssuer("techchallenge-ofisy-auth")
+                .build().parseSignedClaims(token).getPayload();
+        String subject = claims.getSubject();
+        String forwardedId = request.getHeader(CUSTOMER_ID_HEADER);
+        if (claims.getExpiration() == null || subject == null || !subject.equals(forwardedId)
+                || !UUID.fromString(subject).toString().equals(subject)) {
+            throw new IllegalArgumentException("Invalid customer identity");
         }
-
-        filterChain.doFilter(request, response);
+        SecurityContextHolder.getContext().setAuthentication(UsernamePasswordAuthenticationToken.authenticated(
+                subject, null, List.of(new SimpleGrantedAuthority("ROLE_CUSTOMER"))));
     }
 }
 

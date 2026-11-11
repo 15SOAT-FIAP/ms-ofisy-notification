@@ -10,6 +10,8 @@ public class Notification {
     private final NotificationType type;
     private final UUID stockId;
     private final UUID quoteId;
+    private final UUID customerId;
+    private final UUID serviceOrderId;
     private final NotificationMessage message;
     private boolean read;
     private final LocalDateTime createdAt;
@@ -20,6 +22,8 @@ public class Notification {
         this.type = builder.type;
         this.stockId = builder.stockId;
         this.quoteId = builder.quoteId;
+        this.customerId = builder.customerId;
+        this.serviceOrderId = builder.serviceOrderId;
         this.message = builder.message;
         this.read = builder.read;
         this.createdAt = builder.createdAt;
@@ -59,11 +63,18 @@ public class Notification {
     }
 
     public static Notification createForQuote(UUID id, UUID quoteId, NotificationMessage message) {
+        return createForQuote(id, quoteId, message, null, null);
+    }
+
+    public static Notification createForQuote(UUID id, UUID quoteId, NotificationMessage message,
+                                              UUID serviceOrderId, UUID customerId) {
         LocalDateTime now = LocalDateTime.now();
         return builder()
                 .id(id)
                 .type(NotificationType.QUOTE_GENERATED)
                 .quoteId(quoteId)
+                .serviceOrderId(serviceOrderId)
+                .customerId(customerId)
                 .message(message)
                 .read(false)
                 .createdAt(now)
@@ -92,11 +103,25 @@ public class Notification {
         return quoteId;
     }
 
+    public UUID getCustomerId() {
+        return customerId;
+    }
+
+    public UUID getServiceOrderId() {
+        return serviceOrderId;
+    }
+
     public UUID getReferenceId() {
         return stockId != null ? stockId : quoteId;
     }
 
     public static Notification reconstruct(UUID id, NotificationType type, String message, UUID referenceId, Boolean read, LocalDateTime createdAt, LocalDateTime updatedAt) {
+        return reconstruct(id, type, message, referenceId, read, createdAt, updatedAt, null, null);
+    }
+
+    public static Notification reconstruct(UUID id, NotificationType type, String message, UUID referenceId,
+                                           Boolean read, LocalDateTime createdAt, LocalDateTime updatedAt,
+                                           UUID serviceOrderId, UUID customerId) {
         Builder builder = builder()
                 .id(id)
                 .type(type)
@@ -107,7 +132,8 @@ public class Notification {
 
         return switch (Objects.requireNonNull(type, "Notification type is required")) {
             case LOW_STOCK -> builder.stockId(referenceId).build();
-            case QUOTE_GENERATED -> builder.quoteId(referenceId).build();
+            case QUOTE_GENERATED -> builder.quoteId(referenceId).serviceOrderId(serviceOrderId)
+                    .customerId(customerId).build();
         };
     }
 
@@ -139,6 +165,8 @@ public class Notification {
         private NotificationType type;
         private UUID stockId;
         private UUID quoteId;
+        private UUID customerId;
+        private UUID serviceOrderId;
         private NotificationMessage message;
         private boolean read;
         private LocalDateTime createdAt;
@@ -161,6 +189,16 @@ public class Notification {
 
         public Builder quoteId(UUID quoteId) {
             this.quoteId = quoteId;
+            return this;
+        }
+
+        public Builder customerId(UUID customerId) {
+            this.customerId = customerId;
+            return this;
+        }
+
+        public Builder serviceOrderId(UUID serviceOrderId) {
+            this.serviceOrderId = serviceOrderId;
             return this;
         }
 

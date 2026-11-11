@@ -46,6 +46,8 @@ class JwtAuthFilterTest {
 
     @BeforeEach
     void setUp() {
+        lenient().when(request.getAttribute(org.springframework.web.util.ServletRequestPathUtils.PATH_ATTRIBUTE))
+                .thenReturn(org.springframework.http.server.RequestPath.parse("/api/v1/notifications/stock", ""));
         SecurityContextHolder.clearContext();
         filter = new JwtAuthFilter(SECRET, ISSUER);
 

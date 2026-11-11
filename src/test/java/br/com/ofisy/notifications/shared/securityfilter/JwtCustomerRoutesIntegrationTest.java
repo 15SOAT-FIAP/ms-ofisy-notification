@@ -39,12 +39,14 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @SpringJUnitWebConfig(JwtCustomerRoutesIntegrationTest.WebConfig.class)
 @TestPropertySource(properties = {
         "app.jwt.secret=employee-test-secret-with-at-least-32-bytes",
-        "app.jwt.issuer=techchallenge-ofisy-api"
+        "app.jwt.issuer=techchallenge-ofisy-api",
+        "app.jwt.customer-secret=customer-test-secret-with-at-least-32-bytes"
 })
 class JwtCustomerRoutesIntegrationTest {
     private static final String ROOT = "/api/v1/notifications/service-orders";
     private static final String STOCK = "/api/v1/notifications/stock";
     private static final String EMPLOYEE_SECRET = "employee-test-secret-with-at-least-32-bytes";
+    private static final String CUSTOMER_ID = "c3d4e5f6-a7b8-4012-8def-123456780001";
     private static final String CUSTOMER_SECRET = "customer-test-secret-with-at-least-32-bytes";
 
     @Autowired private WebApplicationContext context;
@@ -59,14 +61,16 @@ class JwtCustomerRoutesIntegrationTest {
     @ValueSource(strings = {"", "/unread", "/123"})
     void gatewayAuthenticatedCustomerReachesPublicGetRoutes(String suffix) throws Exception {
         mvc.perform(MockMvcRequestBuilders.get(ROOT + suffix)
-                        .header("Authorization", "Bearer " + customerToken()))
+                        .header("Authorization", "Bearer " + customerToken())
+                        .header("X-Customer-Id", CUSTOMER_ID))
                 .andExpect(status().isOk()).andExpect(content().string("customer-notifications"));
     }
 
     @Test
     void gatewayAuthenticatedCustomerCanMarkNotificationAsRead() throws Exception {
         mvc.perform(MockMvcRequestBuilders.patch(ROOT + "/123/read")
-                        .header("Authorization", "Bearer " + customerToken()))
+                        .header("Authorization", "Bearer " + customerToken())
+                        .header("X-Customer-Id", CUSTOMER_ID))
                 .andExpect(status().isOk()).andExpect(content().string("marked-as-read"));
     }
 
@@ -74,28 +78,34 @@ class JwtCustomerRoutesIntegrationTest {
     void customerRouteMatcherRespectsTheServletContextPath() throws Exception {
         mvc.perform(MockMvcRequestBuilders.get("/notification-service" + ROOT)
                         .contextPath("/notification-service")
-                        .header("Authorization", "Bearer " + customerToken()))
+                        .header("Authorization", "Bearer " + customerToken())
+                        .header("X-Customer-Id", CUSTOMER_ID))
                 .andExpect(status().isOk());
     }
 
     @Test
     void customerRouteMatcherIgnoresQueryParameters() throws Exception {
         mvc.perform(MockMvcRequestBuilders.get(ROOT).param("limit", "10").param("nextToken", "opaque")
-                        .header("Authorization", "Bearer " + customerToken()))
+                        .header("Authorization", "Bearer " + customerToken())
+                        .header("X-Customer-Id", CUSTOMER_ID))
                 .andExpect(status().isOk());
     }
 
     @Test
-    void existingAnonymousCustomerRouteContractIsPreserved() throws Exception {
-        mvc.perform(MockMvcRequestBuilders.get(ROOT)).andExpect(status().isOk());
-        mvc.perform(MockMvcRequestBuilders.patch(ROOT + "/123/read")).andExpect(status().isOk());
+    void anonymousAndForgedCustomerIdentityAreRejected() throws Exception {
+        mvc.perform(MockMvcRequestBuilders.get(ROOT)).andExpect(status().isUnauthorized());
+        mvc.perform(MockMvcRequestBuilders.patch(ROOT + "/123/read")).andExpect(status().isUnauthorized());
+        mvc.perform(MockMvcRequestBuilders.get(ROOT).header("Authorization", "Bearer " + customerToken())
+                        .header("X-Customer-Id", "00000000-0000-4000-8000-000000000001"))
+                .andExpect(status().isUnauthorized());
     }
 
     @ParameterizedTest
     @ValueSource(strings = {STOCK, "/api/v1/notifications/service-orders-admin",
             "/api/v1/notifications/service-orders-evil/123"})
     void customerTokenCannotAuthenticateStockOrSimilarlyNamedRoutes(String path) throws Exception {
-        mvc.perform(MockMvcRequestBuilders.get(path).header("Authorization", "Bearer " + customerToken()))
+        mvc.perform(MockMvcRequestBuilders.get(path).header("Authorization", "Bearer " + customerToken())
+                        .header("X-Customer-Id", CUSTOMER_ID))
                 .andExpect(status().isUnauthorized());
     }
 
@@ -135,7 +145,7 @@ class JwtCustomerRoutesIntegrationTest {
         // Same claims and explicit HS256 as techchallenge-ofisy-auth/internal/jwt/jwt.go.
         // Separate signing key proves that the employee filter does not parse the customer identity.
         return Jwts.builder().issuer("techchallenge-ofisy-auth")
-                .subject("c3d4e5f6-a7b8-4012-8def-123456780001")
+                .subject(CUSTOMER_ID)
                 .issuedAt(Date.from(Instant.now())).expiration(Date.from(Instant.now().plusSeconds(300)))
                 .signWith(Keys.hmacShaKeyFor(CUSTOMER_SECRET.getBytes(StandardCharsets.UTF_8)), Jwts.SIG.HS256)
                 .compact();

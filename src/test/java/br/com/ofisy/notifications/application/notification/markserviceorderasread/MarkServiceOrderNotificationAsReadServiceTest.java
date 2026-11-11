@@ -9,22 +9,26 @@ class MarkServiceOrderNotificationAsReadServiceTest {
     private final NotificationRepository repository=mock(NotificationRepository.class);
     private final MarkServiceOrderNotificationAsReadService service=new MarkServiceOrderNotificationAsReadService(repository);
     private final UUID id=UUID.randomUUID();
-    @Test void acceptsExpectedType() {
-        var notification=Notification.create(id,NotificationType.QUOTE_GENERATED,"Mensagem",UUID.randomUUID());
-        when(repository.findById(id)).thenReturn(Optional.of(notification));
-        when(repository.save(notification)).thenReturn(notification);
-        assertThat(service.execute(new MarkServiceOrderNotificationAsReadUseCase.MarkAsReadCommand(id))).isSameAs(notification);
-        assertThat(notification.isRead()).isTrue(); verify(repository).save(notification);
+    private final UUID customerId = UUID.randomUUID();
+
+    @Test
+    void returnsTheResultOfTheConditionalUpdate() {
+        var notification = Notification.createForQuote(id, UUID.randomUUID(),
+                NotificationMessage.fromString("Mensagem"), UUID.randomUUID(), customerId);
+        notification.markAsRead();
+        when(repository.markServiceOrderAsRead(id, customerId)).thenReturn(Optional.of(notification));
+
+        assertThat(service.execute(new MarkServiceOrderNotificationAsReadUseCase.MarkAsReadCommand(id, customerId)))
+                .isSameAs(notification);
+        verify(repository, never()).save(any());
     }
-    @Test void missingAndWrongTypeHaveSameNotFoundContractWithoutWrites() {
-        var wrong=Notification.create(id,NotificationType.LOW_STOCK,"Mensagem",UUID.randomUUID());
-        var before=wrong.getUpdatedAt();
-        when(repository.findById(id)).thenReturn(Optional.empty(),Optional.of(wrong));
-        for(int i=0;i<2;i++) {
-            assertThatThrownBy(()->service.execute(new MarkServiceOrderNotificationAsReadUseCase.MarkAsReadCommand(id))).isInstanceOf(NotificationNotFoundException.class)
-                    .hasMessage("Notificação não encontrada: "+id);
-        }
-        assertThat(wrong.isRead()).isFalse();assertThat(wrong.getUpdatedAt()).isEqualTo(before);
-        verify(repository,never()).save(any());
+
+    @Test
+    void returnsNotFoundWhenTheConditionalUpdateIsDenied() {
+        when(repository.markServiceOrderAsRead(id, customerId)).thenReturn(Optional.empty());
+        assertThatThrownBy(() -> service.execute(new MarkServiceOrderNotificationAsReadUseCase.MarkAsReadCommand(id, customerId)))
+                .isInstanceOf(NotificationNotFoundException.class)
+                .hasMessage("Notificação não encontrada: " + id);
+        verify(repository, never()).save(any());
     }
 }

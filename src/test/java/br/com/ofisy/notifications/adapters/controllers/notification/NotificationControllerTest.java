@@ -18,13 +18,14 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.mockito.Mockito.*;
 import static org.assertj.core.api.Assertions.*;
 class NotificationControllerTest {
+    private static final UUID CUSTOMER = UUID.randomUUID();
     @ParameterizedTest
     @CsvSource({"stock", "stock/unread", "service-orders", "service-orders/unread"})
     void invalidLimitsReturn400BeforeCallingRepository(String route) throws Exception {
         var repository=mock(NotificationRepository.class);
         var mvc=MockMvcBuilders.standaloneSetup(new NotificationController(new FindStockNotificationByIdService(repository), new FindServiceOrderNotificationByIdService(repository), new MarkStockNotificationAsReadService(repository), new MarkServiceOrderNotificationAsReadService(repository), new FindAllStockNotificationsService(repository), new FindUnreadStockNotificationsService(repository), new FindAllServiceOrderNotificationsService(repository), new FindUnreadServiceOrderNotificationsService(repository))).setControllerAdvice(new NotificationExceptionHandler()).build();
         for (String limit : new String[] {"0", "-1", "101"}) {
-            mvc.perform(get("/api/v1/notifications/"+route).param("limit", limit))
+            mvc.perform(get("/api/v1/notifications/"+route).header("X-Customer-Id", CUSTOMER.toString()).param("limit", limit))
                     .andExpect(status().isBadRequest()).andExpect(jsonPath("$.title").value("Paginação inválida"));
         }
         verifyNoInteractions(repository);
@@ -37,9 +38,10 @@ class NotificationControllerTest {
         var mvc=MockMvcBuilders.standaloneSetup(new NotificationController(new FindStockNotificationByIdService(repository), new FindServiceOrderNotificationByIdService(repository), new MarkStockNotificationAsReadService(repository), new MarkServiceOrderNotificationAsReadService(repository), new FindAllStockNotificationsService(repository), new FindUnreadStockNotificationsService(repository), new FindAllServiceOrderNotificationsService(repository), new FindUnreadServiceOrderNotificationsService(repository))).setControllerAdvice(new NotificationExceptionHandler()).build();
         var cursor="opaque-input-token";
         var page=new PaginatedResult<Notification>(List.of(),"opaque-next-token");
-        if(unread) when(repository.findUnreadByType(eq(type),eq(10),eq(cursor))).thenReturn(page);
+        if (type == NotificationType.QUOTE_GENERATED) when(repository.findServiceOrdersByCustomer(CUSTOMER, unread, 10, cursor)).thenReturn(page);
+        else if(unread) when(repository.findUnreadByType(eq(type),eq(10),eq(cursor))).thenReturn(page);
         else when(repository.findAllByType(eq(type),eq(10),eq(cursor))).thenReturn(page);
-        mvc.perform(get("/api/v1/notifications/"+route).param("limit","10").param("nextToken",cursor))
+        mvc.perform(get("/api/v1/notifications/"+route).header("X-Customer-Id", CUSTOMER.toString()).param("limit","10").param("nextToken",cursor))
             .andExpect(status().isOk()).andExpect(jsonPath("$.items").isArray()).andExpect(jsonPath("$.nextToken").value("opaque-next-token"));
     }
     @ParameterizedTest
@@ -47,19 +49,24 @@ class NotificationControllerTest {
     void correctTypeSucceedsAndWrongOrMissingTypeReturnsIdentical404WithoutUpdating(String route,NotificationType type) throws Exception {
         var repository=mock(NotificationRepository.class);
         var mvc=MockMvcBuilders.standaloneSetup(new NotificationController(new FindStockNotificationByIdService(repository), new FindServiceOrderNotificationByIdService(repository), new MarkStockNotificationAsReadService(repository), new MarkServiceOrderNotificationAsReadService(repository), new FindAllStockNotificationsService(repository), new FindUnreadStockNotificationsService(repository), new FindAllServiceOrderNotificationsService(repository), new FindUnreadServiceOrderNotificationsService(repository))).setControllerAdvice(new NotificationExceptionHandler()).build();
-        var id=UUID.randomUUID();var n=Notification.create(id,type,"Mensagem",UUID.randomUUID());
+        var id = UUID.randomUUID();
+        var n = type == NotificationType.QUOTE_GENERATED
+                ? Notification.createForQuote(id, UUID.randomUUID(), NotificationMessage.fromString("Mensagem"), UUID.randomUUID(), CUSTOMER)
+                : Notification.create(id, type, "Mensagem", UUID.randomUUID());
         when(repository.findById(id)).thenReturn(Optional.of(n));when(repository.save(n)).thenReturn(n);
+        when(repository.markServiceOrderAsRead(id, CUSTOMER)).thenAnswer(invocation -> { n.markAsRead(); return Optional.of(n); });
         var path="/api/v1/notifications/"+route+"/"+id;
-        mvc.perform(get(path)).andExpect(status().isOk()).andExpect(jsonPath(type==NotificationType.LOW_STOCK?"$.stockId":"$.quoteId").value(n.getReferenceId().toString()));
-        mvc.perform(patch(path+"/read")).andExpect(status().isOk()).andExpect(jsonPath("$.read").value(true));
+        mvc.perform(get(path).header("X-Customer-Id", CUSTOMER.toString())).andExpect(status().isOk()).andExpect(jsonPath(type==NotificationType.LOW_STOCK?"$.stockId":"$.quoteId").value(n.getReferenceId().toString()));
+        mvc.perform(patch(path+"/read").header("X-Customer-Id", CUSTOMER.toString())).andExpect(status().isOk()).andExpect(jsonPath("$.read").value(true));
         clearInvocations(repository);
         var wrong=Notification.create(id,type==NotificationType.LOW_STOCK?NotificationType.QUOTE_GENERATED:NotificationType.LOW_STOCK,"Mensagem",UUID.randomUUID());
         when(repository.findById(id)).thenReturn(Optional.of(wrong));
-        mvc.perform(get(path)).andExpect(status().isNotFound()).andExpect(jsonPath("$.title").value("Notificação não encontrada"));
-        mvc.perform(patch(path+"/read")).andExpect(status().isNotFound());
+        when(repository.markServiceOrderAsRead(id, CUSTOMER)).thenReturn(Optional.empty());
+        mvc.perform(get(path).header("X-Customer-Id", CUSTOMER.toString())).andExpect(status().isNotFound()).andExpect(jsonPath("$.title").value("Notificação não encontrada"));
+        mvc.perform(patch(path+"/read").header("X-Customer-Id", CUSTOMER.toString())).andExpect(status().isNotFound());
         assertThat(wrong.isRead()).isFalse();verify(repository,never()).save(any());
         when(repository.findById(id)).thenReturn(Optional.empty());
-        mvc.perform(get(path)).andExpect(status().isNotFound()).andExpect(jsonPath("$.detail").value("Notificação não encontrada: "+id));
-        mvc.perform(patch(path+"/read")).andExpect(status().isNotFound());
+        mvc.perform(get(path).header("X-Customer-Id", CUSTOMER.toString())).andExpect(status().isNotFound()).andExpect(jsonPath("$.detail").value("Notificação não encontrada: "+id));
+        mvc.perform(patch(path+"/read").header("X-Customer-Id", CUSTOMER.toString())).andExpect(status().isNotFound());
     }
 }

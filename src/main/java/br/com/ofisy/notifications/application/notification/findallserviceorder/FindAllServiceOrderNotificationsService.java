@@ -3,7 +3,7 @@ package br.com.ofisy.notifications.application.notification.findallserviceorder;
 import br.com.ofisy.notifications.domain.notification.Notification;
 import br.com.ofisy.notifications.domain.notification.PaginatedResult;
 import br.com.ofisy.notifications.domain.notification.NotificationRepository;
-import br.com.ofisy.notifications.domain.notification.NotificationType;
+import java.util.UUID;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -15,7 +15,7 @@ public class FindAllServiceOrderNotificationsService implements FindAllServiceOr
     }
 
     @Override
-    public PaginatedResult<Notification> execute(int limit, String cursor) {
-        return repository.findAllByType(NotificationType.QUOTE_GENERATED, limit, cursor);
+    public PaginatedResult<Notification> execute(UUID customerId, int limit, String cursor) {
+        return repository.findServiceOrdersByCustomer(customerId, false, limit, cursor);
     }
 }
