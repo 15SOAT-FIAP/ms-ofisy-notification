@@ -16,18 +16,8 @@ public class CreateQuoteNotificationService implements CreateQuoteNotificationUs
     }
 
     @Override
-    public Notification execute(CreateQuoteCommand command) {
-        NotificationMessage message = NotificationMessage.forQuote(
-                command.quoteId(),
-                command.serviceOrderId(),
-                command.totalPrice()
-        );
-        Notification notification = Notification.createForQuote(command.quoteId(), message);
-        return notificationRepository.save(notification);
-    }
-    @Override
     public boolean executeEvent(UUID eventId, CreateQuoteCommand command) {
-        NotificationMessage message = NotificationMessage.forQuote(
+        NotificationMessage message = NotificationMessage.forQuoteSentForApproval(
                 command.quoteId(),
                 command.serviceOrderId(),
                 command.totalPrice()

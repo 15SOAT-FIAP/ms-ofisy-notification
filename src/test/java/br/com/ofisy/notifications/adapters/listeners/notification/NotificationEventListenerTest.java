@@ -19,7 +19,7 @@ class NotificationEventListenerTest {
     private final CreateQuoteNotificationUseCase quote = mock(CreateQuoteNotificationUseCase.class);
     private final JsonMapper mapper = JsonMapper.builder().build();
     private final NotificationEventListener listener = new NotificationEventListener(List.of(
-            new StockLowEventHandler(low, mapper), new QuoteCreatedEventHandler(quote, mapper)));
+            new StockLowEventHandler(low, mapper), new QuoteSentForApprovalEventHandler(quote, mapper)));
 
     @Test
     void rejectsDuplicateHandlersAtStartup() {
@@ -52,7 +52,7 @@ class NotificationEventListenerTest {
     void deserializesQuotePayloadWithoutServiceOrderAndDelegatesUsingEnvelopeId() {
         var ref = UUID.randomUUID();
         var order = UUID.randomUUID();
-        var original = event("QuoteCreated", order,
+        var original = event("QuoteSentForApproval", order,
                 Map.of("quoteId", ref, "totalPrice", "123.45"));
         var decoded = mapper.readValue(mapper.writeValueAsString(original), EventEnvelope.class);
         assertThat(decoded.eventId()).isEqualTo(original.eventId());
@@ -63,6 +63,25 @@ class NotificationEventListenerTest {
         verify(quote).executeEvent(eq(original.eventId()), argThat(c ->
                 c.quoteId().equals(ref) && c.serviceOrderId().equals(order) && c.totalPrice().toString().equals("123.45")));
         verifyNoInteractions(low);
+    }
+
+    @Test
+    void quoteCreationAndCompensationEventsDoNotNotifyCustomer() {
+        var order = UUID.randomUUID();
+        var payload = Map.of("quoteId", UUID.randomUUID(), "totalPrice", "123.45");
+        for (String type : new String[] {"QuoteCreated", "StockConsumptionFailed", "QuoteCancelled"}) {
+            listener.handleNotificationEvent(event(type, order, payload));
+        }
+        verifyNoInteractions(low, quote);
+    }
+
+    @Test
+    void quoteProcessingFailuresRemainRetriable() {
+        var event = event("QuoteSentForApproval", UUID.randomUUID(),
+                Map.of("quoteId", UUID.randomUUID(), "totalPrice", 123.45));
+        when(quote.executeEvent(any(), any())).thenThrow(new IllegalStateException("unavailable"));
+        assertThatThrownBy(() -> listener.handleNotificationEvent(event))
+                .isInstanceOf(IllegalStateException.class).hasMessage("unavailable");
     }
 
     @Test
@@ -89,11 +108,11 @@ class NotificationEventListenerTest {
 
     @Test
     void missingEnvelopeServiceOrderIsRejectedBeforeCreatingQuote() {
-        var event = event("QuoteCreated", null,
+        var event = event("QuoteSentForApproval", null,
                 Map.of("quoteId", UUID.randomUUID(), "totalPrice", "123.45"));
         assertThatThrownBy(() -> listener.handleNotificationEvent(event))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("serviceOrderId is required for QuoteCreated");
+                .hasMessage("serviceOrderId is required for QuoteSentForApproval");
         verifyNoInteractions(low, quote);
     }
 
@@ -104,7 +123,7 @@ class NotificationEventListenerTest {
                 Map.of("totalPrice", "123.45"),
                 Map.of("quoteId", UUID.randomUUID()),
                 Map.of("quoteId", UUID.randomUUID(), "totalPrice", "invalid")}) {
-            assertThatThrownBy(() -> listener.handleNotificationEvent(event("QuoteCreated", UUID.randomUUID(), payload)))
+            assertThatThrownBy(() -> listener.handleNotificationEvent(event("QuoteSentForApproval", UUID.randomUUID(), payload)))
                     .isInstanceOf(RuntimeException.class);
         }
         verifyNoInteractions(low, quote);
@@ -116,7 +135,7 @@ class NotificationEventListenerTest {
         var decoded = mapper.readValue(mapper.writeValueAsString(generic), EventEnvelope.class);
         assertThat(decoded.payload().isObject()).isTrue();
         listener.handleNotificationEvent(decoded);
-        for (String type : new String[] {"StockLow", "QuoteCreated"}) {
+        for (String type : new String[] {"StockLow", "QuoteSentForApproval"}) {
             assertThatThrownBy(() -> listener.handleNotificationEvent(event(type, UUID.randomUUID(), Map.of())))
                     .isInstanceOf(RuntimeException.class);
             assertThatThrownBy(() -> listener.handleNotificationEvent(event(type, UUID.randomUUID(), null)))

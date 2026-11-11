@@ -11,6 +11,7 @@ import urllib.parse
 import uuid
 import boto3
 from botocore.config import Config
+from events import assert_quote_subscription
 
 ORIGIN = "http://app:8081"
 API_PATH = "/api/v1/notifications"
@@ -84,6 +85,7 @@ def check_openapi():
 
 
 def main():
+    assert_quote_subscription()
     admin = token()
     eventually(lambda: request("/stock", jwt=admin)[0] == 200, "API startup")
     check_openapi()
@@ -103,10 +105,9 @@ def main():
     event = {"eventId": event_id, "type": "StockLow", "serviceOrderId": None, "occurredAt": "2026-10-13T00:00:00Z",
              "payload": {"stockId": str(uuid.uuid4()), "productName": "Radiador smoke test", "currentQuantity": 2, "minThreshold": 10}}
 
-    def send(body):
-        sns.publish(TopicArn=topic_arns["ofisy-stock-events.fifo" if body["type"] == "StockLow" else "ofisy-billing-events.fifo"],
+    def send(body, topic=None):
+        sns.publish(TopicArn=topic_arns[topic or ("ofisy-stock-events.fifo" if body["type"] == "StockLow" else "ofisy-billing-events.fifo")],
                     Message=json.dumps(body), MessageGroupId=body.get("serviceOrderId") or body["payload"]["stockId"],
-                    MessageAttributes={"type": {"DataType": "String", "StringValue": body["type"]}},
                          MessageDeduplicationId=str(uuid.uuid4()))
 
     send(event)
@@ -136,16 +137,31 @@ def main():
     assert item["read"]["BOOL"] is True
     stock = request("/stock?limit=10", jwt=admin)[1]
     assert any(n["id"] == event_id for n in stock["items"])
-    quote = {"eventId": str(uuid.uuid4()), "type": "QuoteCreated", "occurredAt": event["occurredAt"],
+    quote = {"eventId": str(uuid.uuid4()), "type": "QuoteSentForApproval", "occurredAt": event["occurredAt"],
              "serviceOrderId": str(uuid.uuid4()),
              "payload": {"quoteId": str(uuid.uuid4()), "totalPrice": "123.45"}}
-    send(quote)
-    eventually(lambda: any(n["id"] == quote["eventId"] for n in request("/service-orders")[1]["items"]), "QuoteCreated public listing")
+    premature = {**quote, "eventId": str(uuid.uuid4()), "type": "QuoteCreated"}
+    send(premature)
+    failed_created = {**premature, "eventId": str(uuid.uuid4()), "serviceOrderId": str(uuid.uuid4()),
+                      "payload": {"quoteId": str(uuid.uuid4()), "totalPrice": "123.45"}}
+    send(failed_created)
+    stock_failure = {"eventId": str(uuid.uuid4()), "type": "StockConsumptionFailed",
+                     "serviceOrderId": failed_created["serviceOrderId"], "occurredAt": quote["occurredAt"], "payload": {}}
+    send(stock_failure, "ofisy-stock-events.fifo")
+    # Bypass SNS as well: a direct QuoteCreated delivery must not create a notification.
+    direct_created = {**premature, "eventId": str(uuid.uuid4())}
+    sqs.send_message(QueueUrl=queue, MessageBody=json.dumps(direct_created),
+                     MessageGroupId=quote["serviceOrderId"], MessageDeduplicationId=direct_created["eventId"])
+    send(quote)  # Positive control with the same OS group, without SNS message attributes.
+    eventually(lambda: any(n["id"] == quote["eventId"] for n in request("/service-orders")[1]["items"]), "QuoteSentForApproval public listing")
+    for ignored_event in (premature, failed_created, stock_failure, direct_created):
+        assert "Item" not in ddb.get_item(TableName="Notifications", Key={"id": {"S": ignored_event["eventId"]}}, ConsistentRead=True)
+    assert not any(n["quoteId"] == failed_created["payload"]["quoteId"] for n in request("/service-orders")[1]["items"])
     quote_path = "/service-orders/" + quote["eventId"]
     quote_record = request(quote_path)[1]
     assert set(quote_record) == NOTIFICATION_FIELDS
     assert quote_record["quoteId"] == quote["payload"]["quoteId"] and quote_record["stockId"] is None
-    assert quote_record["message"] == "Orçamento #{} gerado para a ordem de serviço '{}'. Valor total: R$ 123.45".format(quote["payload"]["quoteId"], quote["serviceOrderId"])
+    assert quote_record["message"] == "Orçamento #{} disponível para aprovação na ordem de serviço '{}'. Valor total: R$ 123.45".format(quote["payload"]["quoteId"], quote["serviceOrderId"])
     assert request("/stock/" + quote["eventId"], jwt=admin)[0] == 404
     assert request("/stock/" + quote["eventId"] + "/read", method="PATCH", jwt=admin)[0] == 404
     assert request(quote_path)[1]["read"] is False
@@ -239,9 +255,20 @@ def main():
     send(repaired)
     eventually(lambda: request("/stock/" + repaired["eventId"], jwt=admin)[0] == 200, "manual DLQ repair and replay")
     sqs.delete_message(QueueUrl=dlq, ReceiptHandle=failed["ReceiptHandle"])
+    # The new quote event must also retry and reach DLQ when its own payload is invalid.
+    invalid_quote = {**quote, "eventId": str(uuid.uuid4()), "serviceOrderId": str(uuid.uuid4()),
+                     "payload": {"quoteId": str(uuid.uuid4())}}
+    send(invalid_quote)
+    failed_quote = eventually(receive_failed, "invalid approval event reaches DLQ")
+    assert json.loads(failed_quote["Body"])["eventId"] == invalid_quote["eventId"]
+    assert request("/service-orders/" + invalid_quote["eventId"])[0] == 404
+    invalid_quote["payload"]["totalPrice"] = "123.45"
+    send(invalid_quote)
+    eventually(lambda: request("/service-orders/" + invalid_quote["eventId"])[0] == 200, "approval event repair and replay")
+    sqs.delete_message(QueueUrl=dlq, ReceiptHandle=failed_quote["ReceiptHandle"])
     print(json.dumps({"status": "PASS", "checks": ["SNS FIFO to SQS FIFO with raw envelope", "SNS type filter", "invalid payload retry and DLQ", "independent group progress", "manual DLQ repair and replay", "JWT issuer", "JWT signature", "core employee role contract", "pagination validation", "anonymous stock denied",
         "StockLow consumption", "PATCH read", "redelivery preserves read and updatedAt", "DynamoDB persistence",
-        "TypeIndex listing", "QuoteCreated consumption", "core message and DTO fields", "wrong-type GET/PATCH 404 both directions",
+        "TypeIndex listing", "QuoteSentForApproval consumption without SNS attributes", "QuoteCreated filtered and ignored when delivered directly", "stock failure without approval creates no quote notification", "invalid approval event retry, DLQ and replay", "core message and DTO fields", "wrong-type GET/PATCH 404 both directions",
         "wrong-type PATCH preserves state", "missing-id GET/PATCH 404 both categories", "core public quote read route",
         "quote redelivery preserves read and updatedAt", "both unread lists reflect read state", "all four HTTP routes paginate without missing or duplicate records",
         "Swagger UI and eight OpenAPI operations", "OpenAPI Bearer requirements and HTTP response schemas"], "stockNotificationId": event_id,

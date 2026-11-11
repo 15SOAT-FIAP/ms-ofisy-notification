@@ -9,13 +9,13 @@ O bootstrap cria a tabela Notifications, os índices TypeIndex/ReferenceIdIndex,
 | Tópico SNS FIFO | Evento externo |
 |---|---|
 | ofisy-stock-events.fifo | StockLow |
-| ofisy-billing-events.fifo | QuoteCreated |
+| ofisy-billing-events.fifo | QuoteSentForApproval |
 
-`serviceOrderId` fica no envelope, sem duplicação no payload de QuoteCreated. Os tipos internos/persistidos LOW_STOCK e QUOTE_GENERATED continuam iguais aos do core. Eventos sem dados adicionais podem usar payload `{}`; os eventos reconhecidos acima exigem seus campos específicos.
+`serviceOrderId` fica no envelope, sem duplicação no payload de QuoteSentForApproval. Os tipos internos/persistidos LOW_STOCK e QUOTE_GENERATED continuam iguais aos do core. Eventos sem dados adicionais podem usar payload `{}`; os eventos reconhecidos acima exigem seus campos específicos.
 
-`make dev-test` valida SNS → SQS → aplicação → DynamoDB → API HTTP real, os dois contratos, persistência, duplicatas, filtros, retry, DLQ, progresso de outro grupo e replay. A saída deve conter `"status": "PASS"`. `make dev-test-messaging` executa somente o smoke de mensageria, também disponível em #21. Cada execução deve começar com ambiente limpo, via `make dev-down`, para não misturar mensagens da DLQ.
+`make dev-test` valida SNS → SQS → aplicação → DynamoDB → API HTTP real, os dois contratos, persistência, duplicatas, filtros, retry, DLQ, progresso de outro grupo e replay. A saída deve conter `"status": "PASS"`. `make dev-test-messaging` executa somente o smoke de mensageria, sem as verificações HTTP. Cada execução deve começar com ambiente limpo, via `make dev-down`, para não misturar mensagens da DLQ.
 
-Comandos de cenários: `make dev-stock`, `make dev-quote`, `make dev-invalid`, `make dev-status` e `make dev-replay`. O último reenvia uma mensagem da DLQ preservando eventId, reparando apenas o campo removido pelo cenário invalid. Equivalente sem Make: `docker compose -f dev/integration/compose.yml run --rm --build --no-deps smoke python /tools/events.py stock`.
+Comandos de cenários: `make dev-stock`, `make dev-quote` (QuoteSentForApproval), `make dev-quote-created` e `make dev-stock-failure` (eventos que não devem criar aviso de orçamento), `make dev-invalid`, `make dev-status` e `make dev-replay`. O último reenvia uma mensagem da DLQ preservando eventId, reparando apenas o campo removido pelo cenário invalid. Equivalente sem Make: `docker compose -f dev/integration/compose.yml run --rm --build --no-deps smoke python /tools/events.py stock`.
 
 `make dev-down` encerra somente este projeto Compose. Não há volume persistente: o objetivo é um ambiente descartável. Recursos AWS reais, Terraform, IAM e alarmes continuam sob responsabilidade do repositório de infraestrutura.
 
@@ -29,4 +29,36 @@ Para a suíte Java no PowerShell: `$env:DYNAMODB_TEST_ENDPOINT='http://localhost
 
 ## Limites desta entrega
 
-Regras de mensagem, categorias internas, referências, estado de leitura e 404 para tipo incorreto permanecem equivalentes ao core. O listener apenas traduz os nomes externos. Eventos adicionais desenhados para notification precisam de matriz evento/regra/schema aprovada; esta entrega cobre StockLow e QuoteCreated. Exemplos do desenho com type divergente do título não devem ser copiados literalmente. Terraform, IAM, alarmes, integração real com publicadores e a política de acesso via Gateway são dependências próprias, não comprovadas por LocalStack.
+Categorias internas, referências, estado de leitura e 404 para tipo incorreto permanecem equivalentes ao core. A entrada por evento de orçamento agora produz a mensagem de disponibilidade para aprovação no domínio. A entrada legada execute(command) de orçamento e a mensagem de orçamento gerado foram descomissionadas; a criação de orçamento exige eventId para deduplicação. O listener continua traduzindo transporte em commands. Eventos adicionais desenhados para notification precisam de matriz evento/regra/schema aprovada; esta entrega cobre StockLow e QuoteSentForApproval. Exemplos do desenho com type divergente do título não devem ser copiados literalmente. Terraform, IAM, alarmes, integração real com publicadores e a política de acesso via Gateway são dependências próprias, não comprovadas por LocalStack.
+
+## Orçamento disponível para aprovação
+
+O aviso de orçamento é criado somente ao consumir `QuoteSentForApproval`, após a etapa de estoque no fluxo de Billing. `QuoteCreated` continua sendo um evento de Billing para Stock e é excluído da assinatura de Notification. Sua entrega direta ao listener também não cria notificação. O fluxo StockLow permanece igual.
+
+O consumidor espera eventId/type/serviceOrderId/occurredAt no envelope e quoteId/totalPrice no payload. O serviceOrderId não é duplicado no payload. Esse contrato usa os dados necessários ao consumidor e ainda precisa ser conferido com o publicador real de Billing, que não estava implementado nos heads consultados de seus PRs em 01/11/2026. Os cenários locais simulam o publicador; não validam a transação real de consumo de estoque do outro serviço.
+
+O smoke publica QuoteCreated sem notificação, simula falha de estoque sem envio para aprovação e usa QuoteSentForApproval como controle positivo. Também entrega QuoteCreated diretamente na SQS, exercita o evento novo sem atributos SNS redundantes e valida payload inválido de aprovação → retry → DLQ → reparo/replay. O texto esperado é “Orçamento #{quoteId} disponível para aprovação na ordem de serviço '{serviceOrderId}'. Valor total: R$ {valor com duas casas}”. O tipo persistido/API QUOTE_GENERATED e o schema DynamoDB são mantidos.
+
+A assinatura AWS de Billing para Notification também precisa mudar seu filtro para QuoteSentForApproval de forma coordenada com a implantação do consumidor e o publicador. O bootstrap altera somente LocalStack. Core e Notification são consumidores independentes: o recebimento do evento não garante que o Core já tenha atualizado o status da OS. A notificação não consulta outro banco/serviço para aguardar essa atualização.
+
+## Testes automatizados do consumidor SQS
+
+`NotificationEventListenerIT` segue o padrão JUnit + SpringBootTest + Testcontainers + Awaitility. O teste sobe seu próprio LocalStack 4.9.0 com SNS/SQS/DynamoDB em porta dinâmica, executa o mesmo bootstrap deste Compose e inicia o listener real da aplicação. Não usa mocks de casos de uso/repository nem chama o listener diretamente. O container de teste é removido automaticamente e não interfere neste ambiente de desenvolvimento.
+
+Os testes enviam mensagens e verificam a ação persistida: mensagem/referência/tipo de QuoteSentForApproval e StockLow; descarte de QuoteCreated e compensações; assinatura SNS por corpo sem atributos redundantes; redelivery após marcar leitura; retry, DLQ, progresso de outro grupo e reparo/replay de payloads inválidos. Para negativos e duplicatas, uma mensagem de controle no mesmo grupo FIFO confirma que a entrega anterior foi consumida; asserções não dependem de um sleep fixo.
+
+`mvn test` executa os testes da fase de unidade. `mvn verify` também executa o consumidor pelo Maven Failsafe; Docker é obrigatório para essa etapa, e a classe não é silenciosamente pulada sem Docker. Para rodar somente a classe de mensageria:
+
+```sh
+mvn test-compile failsafe:integration-test failsafe:verify -Dit.test=NotificationEventListenerIT
+```
+
+Para validar a suíte inteira sem skips, mantenha DYNAMODB_TEST_ENDPOINT configurado para as integrações DynamoDB anteriores e rode `mvn clean verify`, seguido de `python dev/integration/assert_reports.py`. O verificador exige também NotificationEventListenerIT nos relatórios de Failsafe. O CI executa essa sequência e publica os relatórios de Surefire e Failsafe.
+
+O bootstrap aceita LOCALSTACK_ENDPOINT para o hook de inicialização interno do Testcontainers; sem a variável, mantém o endereço do Compose. Configurações MVC com mocks ficam marcadas como TestConfiguration para não substituir beans da aplicação no teste completo.
+
+## Reutilização do JAR no CI
+
+Depois de `mvn clean verify` e do gate dos relatórios, o CI aplica também `compose.ci.yml`. Esse override usa `Dockerfile.ci` para copiar o JAR já validado para a mesma base Java 21 JRE e usuário sem privilégios do runtime habitual, sem baixar dependências Maven ou compilar novamente. O ignore específico desse Dockerfile envia somente `target/*.jar` como contexto de aplicação. Todos os testes, cobertura e cenários do smoke continuam obrigatórios.
+
+O Compose de desenvolvimento continua compilando a partir dos fontes pelo Dockerfile principal. Para reproduzir o smoke do CI após a validação Maven, use `docker compose -f dev/integration/compose.yml -f dev/integration/compose.ci.yml up -d --build app`, seguido de `docker compose -f dev/integration/compose.yml -f dev/integration/compose.ci.yml run --rm --build --no-deps smoke`, em ambiente limpo.
