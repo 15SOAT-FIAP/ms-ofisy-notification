@@ -9,7 +9,7 @@ O bootstrap cria a tabela Notifications, os índices TypeIndex/ReferenceIdIndex,
 | Tópico SNS FIFO | Evento externo |
 |---|---|
 | ofisy-stock-events.fifo | StockLow |
-| ofisy-billing-events.fifo | QuoteSentForApproval |
+| ofisy-billing-events.fifo | QuoteSentForApproval, PaymentCheckoutCreated, PaymentConfirmed, PaymentFailed |
 
 `serviceOrderId` fica no envelope, sem duplicação no payload de QuoteSentForApproval. Os tipos internos/persistidos LOW_STOCK e QUOTE_GENERATED continuam iguais aos do core. Eventos sem dados adicionais podem usar payload `{}`; os eventos reconhecidos acima exigem seus campos específicos.
 

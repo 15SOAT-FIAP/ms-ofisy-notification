@@ -100,11 +100,14 @@ public class DynamoDbNotificationRepositoryImpl implements NotificationRepositor
         update.setRead(true);
         update.setUpdatedAt(LocalDateTime.now());
         var condition = Expression.builder()
-                .expression("#customer = :customer AND #type = :type")
+                .expression("#customer = :customer AND #type IN (:quote, :checkout, :confirmed, :failed)")
                 .putExpressionName("#customer", "customerId")
                 .putExpressionName("#type", "type")
                 .putExpressionValue(":customer", AttributeValue.fromS(customerId.toString()))
-                .putExpressionValue(":type", AttributeValue.fromS(NotificationType.QUOTE_GENERATED.name()))
+                .putExpressionValue(":quote", AttributeValue.fromS(NotificationType.QUOTE_GENERATED.name()))
+                .putExpressionValue(":checkout", AttributeValue.fromS(NotificationType.PAYMENT_CHECKOUT_CREATED.name()))
+                .putExpressionValue(":confirmed", AttributeValue.fromS(NotificationType.PAYMENT_CONFIRMED.name()))
+                .putExpressionValue(":failed", AttributeValue.fromS(NotificationType.PAYMENT_FAILED.name()))
                 .build();
         try {
             return Optional.of(NotificationMapper.toDomain(table.updateItem(UpdateItemEnhancedRequest

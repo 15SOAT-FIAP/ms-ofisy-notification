@@ -10,6 +10,8 @@ public class Notification {
     private final NotificationType type;
     private final UUID stockId;
     private final UUID quoteId;
+    private final UUID paymentId;
+    private final String checkoutUrl;
     private final UUID customerId;
     private final UUID serviceOrderId;
     private final NotificationMessage message;
@@ -22,6 +24,8 @@ public class Notification {
         this.type = builder.type;
         this.stockId = builder.stockId;
         this.quoteId = builder.quoteId;
+        this.paymentId = builder.paymentId;
+        this.checkoutUrl = builder.checkoutUrl;
         this.customerId = builder.customerId;
         this.serviceOrderId = builder.serviceOrderId;
         this.message = builder.message;
@@ -87,6 +91,33 @@ public class Notification {
         this.updatedAt = LocalDateTime.now();
     }
 
+    public static Notification createForPayment(UUID id, NotificationType type, UUID paymentId,
+                                               UUID serviceOrderId, UUID customerId,
+                                               NotificationMessage message, String checkoutUrl) {
+        switch (type) {
+            case PAYMENT_CHECKOUT_CREATED -> Objects.requireNonNull(checkoutUrl, "checkoutUrl is required");
+            case PAYMENT_CONFIRMED, PAYMENT_FAILED -> {
+                if (checkoutUrl != null) {
+                    throw new IllegalArgumentException("Only checkout notifications carry a checkout URL");
+                }
+            }
+            case LOW_STOCK, QUOTE_GENERATED -> throw new IllegalArgumentException("Payment notification type is required");
+        }
+        var now = LocalDateTime.now();
+        return builder().id(id).type(type).paymentId(Objects.requireNonNull(paymentId))
+                .serviceOrderId(Objects.requireNonNull(serviceOrderId))
+                .customerId(Objects.requireNonNull(customerId))
+                .message(message).checkoutUrl(checkoutUrl).createdAt(now).updatedAt(now).build();
+    }
+
+    public UUID getPaymentId() {
+        return paymentId;
+    }
+
+    public String getCheckoutUrl() {
+        return checkoutUrl;
+    }
+
     public UUID getId() {
         return id;
     }
@@ -112,16 +143,20 @@ public class Notification {
     }
 
     public UUID getReferenceId() {
-        return stockId != null ? stockId : quoteId;
+        return switch (type) {
+            case LOW_STOCK -> stockId;
+            case QUOTE_GENERATED -> quoteId;
+            case PAYMENT_CHECKOUT_CREATED, PAYMENT_CONFIRMED, PAYMENT_FAILED -> paymentId;
+        };
     }
 
     public static Notification reconstruct(UUID id, NotificationType type, String message, UUID referenceId, Boolean read, LocalDateTime createdAt, LocalDateTime updatedAt) {
-        return reconstruct(id, type, message, referenceId, read, createdAt, updatedAt, null, null);
+        return reconstruct(id, type, message, referenceId, read, createdAt, updatedAt, null, null, null);
     }
 
     public static Notification reconstruct(UUID id, NotificationType type, String message, UUID referenceId,
                                            Boolean read, LocalDateTime createdAt, LocalDateTime updatedAt,
-                                           UUID serviceOrderId, UUID customerId) {
+                                           UUID serviceOrderId, UUID customerId, String checkoutUrl) {
         Builder builder = builder()
                 .id(id)
                 .type(type)
@@ -134,6 +169,8 @@ public class Notification {
             case LOW_STOCK -> builder.stockId(referenceId).build();
             case QUOTE_GENERATED -> builder.quoteId(referenceId).serviceOrderId(serviceOrderId)
                     .customerId(customerId).build();
+            case PAYMENT_CHECKOUT_CREATED, PAYMENT_CONFIRMED, PAYMENT_FAILED -> builder.paymentId(referenceId)
+                    .serviceOrderId(serviceOrderId).customerId(customerId).checkoutUrl(checkoutUrl).build();
         };
     }
 
@@ -141,6 +178,8 @@ public class Notification {
         return switch (Objects.requireNonNull(type, "Notification type is required")) {
             case LOW_STOCK -> createForStock(id, referenceId, NotificationMessage.fromString(message));
             case QUOTE_GENERATED -> createForQuote(id, referenceId, NotificationMessage.fromString(message));
+            case PAYMENT_CHECKOUT_CREATED, PAYMENT_CONFIRMED, PAYMENT_FAILED ->
+                    throw new IllegalArgumentException("Payment notifications require a service order and customer");
         };
     }
 
@@ -165,6 +204,8 @@ public class Notification {
         private NotificationType type;
         private UUID stockId;
         private UUID quoteId;
+        private UUID paymentId;
+        private String checkoutUrl;
         private UUID customerId;
         private UUID serviceOrderId;
         private NotificationMessage message;
@@ -194,6 +235,16 @@ public class Notification {
 
         public Builder customerId(UUID customerId) {
             this.customerId = customerId;
+            return this;
+        }
+
+        public Builder paymentId(UUID paymentId) {
+            this.paymentId = paymentId;
+            return this;
+        }
+
+        public Builder checkoutUrl(String checkoutUrl) {
+            this.checkoutUrl = checkoutUrl;
             return this;
         }
 

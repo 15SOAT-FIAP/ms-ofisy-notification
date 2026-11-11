@@ -64,8 +64,9 @@ def main():
     })["QueueUrl"]
     queue_arn = sqs.get_queue_attributes(QueueUrl=queue, AttributeNames=["QueueArn"])["Attributes"]["QueueArn"]
     topics = [
-        (sns.create_topic(Name="ofisy-stock-events.fifo", Attributes={"FifoTopic": "true"})["TopicArn"], "StockLow"),
-        (sns.create_topic(Name="ofisy-billing-events.fifo", Attributes={"FifoTopic": "true"})["TopicArn"], "QuoteSentForApproval")
+        (sns.create_topic(Name="ofisy-stock-events.fifo", Attributes={"FifoTopic": "true"})["TopicArn"], ["StockLow"]),
+        (sns.create_topic(Name="ofisy-billing-events.fifo", Attributes={"FifoTopic": "true"})["TopicArn"],
+         ["QuoteSentForApproval", "PaymentCheckoutCreated", "PaymentConfirmed", "PaymentFailed"]),
     ]
     sqs.set_queue_attributes(QueueUrl=queue, Attributes={"Policy": json.dumps({
         "Version": "2012-10-17", "Statement": [{
@@ -73,10 +74,10 @@ def main():
             "Resource": queue_arn, "Condition": {"ArnEquals": {"aws:SourceArn": [arn for arn, _ in topics]}}
         }]
     })})
-    for arn, event_type in topics:
+    for arn, event_types in topics:
         sns.subscribe(TopicArn=arn, Protocol="sqs", Endpoint=queue_arn, Attributes={
             "RawMessageDelivery": "true", "FilterPolicyScope": "MessageBody",
-            "FilterPolicy": json.dumps({"type": [event_type]})
+            "FilterPolicy": json.dumps({"type": event_types})
         })
     print("READY: DynamoDB, SNS FIFO producer topics, filtered SQS FIFO and DLQ", flush=True)
 

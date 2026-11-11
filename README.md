@@ -48,6 +48,16 @@ de Core. Para registros anteriores, consulte o [guia de backfill](dev/integratio
 
 ## Eventos consumidos e ambiente local
 
+O Billing também publica `PaymentCheckoutCreated`, `PaymentConfirmed` e
+`PaymentFailed`. O Notification grava cada aviso para o dono da ordem de serviço e
+o disponibiliza pelas mesmas rotas autenticadas de notificações da OS. O checkout
+expõe `paymentId` e `checkoutUrl`. A confirmação, a recusa e a expiração expõem
+`paymentId` e uma mensagem de situação. Os campos de pagamento são omitidos nas
+respostas de estoque e orçamento.
+
+O webhook do Mercado Pago é recebido pelo Billing. O Notification recebe somente
+os eventos publicados no SNS/SQS, com deduplicação por `eventId`.
+
 - StockLow: aviso de estoque baixo.
 - QuoteSentForApproval: orçamento disponível para aprovação após a etapa de estoque; serviceOrderId no envelope, quoteId/totalPrice no payload.
 

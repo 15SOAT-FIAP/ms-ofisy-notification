@@ -35,10 +35,10 @@ def token(issuer=ISSUER, secret=SECRET, role="ADMIN", subject="local-tester"):
     return content + "." + base64.urlsafe_b64encode(signature).rstrip(b"=").decode()
 
 
-def request(path, method="GET", jwt=None):
+def request(path, method="GET", jwt=None, customer_id=CUSTOMER_ID):
     if path.startswith("/service-orders"):
-        headers = {"Authorization": "Bearer " + token(issuer="techchallenge-ofisy-auth", role=None, subject=CUSTOMER_ID),
-                   "X-Customer-Id": CUSTOMER_ID}
+        headers = {"Authorization": "Bearer " + token(issuer="techchallenge-ofisy-auth", role=None, subject=customer_id),
+                   "X-Customer-Id": customer_id}
     else:
         headers = {"Authorization": "Bearer " + jwt} if jwt else {}
     try:
@@ -84,7 +84,7 @@ def check_openapi():
             else:
                 assert operation["security"] == [{"BearerToken": []}]
     schemas = components["schemas"]
-    assert set(schemas["NotificationResponseDTO"]["properties"]) == NOTIFICATION_FIELDS
+    assert set(schemas["NotificationResponseDTO"]["properties"]) == NOTIFICATION_FIELDS | {"paymentId", "checkoutUrl"}
     page = paths[API_PATH + "/stock"]["get"]["responses"]["200"]
     page_ref = next(iter(page["content"].values()))["schema"]["$ref"]
     assert set(schemas[page_ref.rsplit("/", 1)[-1]]["properties"]) == {"items", "nextToken"}
@@ -272,12 +272,45 @@ def main():
     send(invalid_quote)
     eventually(lambda: request("/service-orders/" + invalid_quote["eventId"])[0] == 200, "approval event repair and replay")
     sqs.delete_message(QueueUrl=dlq, ReceiptHandle=failed_quote["ReceiptHandle"])
+    payment_id = str(uuid.uuid4())
+    checkout_url = "https://www.mercadopago.com.br/checkout/v1/redirect?order_id=LOCAL_TEST"
+    cases = (
+        ("PaymentCheckoutCreated", "PAYMENT_CHECKOUT_CREATED",
+         {"paymentId": payment_id, "checkoutUrl": checkout_url, "amount": 250}, "Pagamento disponível"),
+        ("PaymentConfirmed", "PAYMENT_CONFIRMED", {"paymentId": payment_id, "amount": 250}, "Pagamento confirmado"),
+        ("PaymentFailed", "PAYMENT_FAILED",
+         {"paymentId": str(uuid.uuid4()), "reason": "FAILED", "statusDetail": "rejected_by_issuer"}, "Pagamento recusado"),
+        ("PaymentFailed", "PAYMENT_FAILED",
+         {"paymentId": str(uuid.uuid4()), "reason": "EXPIRED", "statusDetail": None}, "Pagamento expirado"),
+    )
+    other_customer = "00000000-0000-4000-8000-000000000002"
+    for kind, expected_type, payload, message in cases:
+        payment_event = {**quote, "eventId": str(uuid.uuid4()), "type": kind, "payload": payload}
+        send(payment_event)
+        payment_path = "/service-orders/" + payment_event["eventId"]
+        eventually(lambda: request(payment_path)[0] == 200, kind + " consumption")
+        payment = request(payment_path)[1]
+        assert payment["type"] == expected_type and payment["paymentId"] == payload["paymentId"]
+        assert payment["stockId"] is None and payment["quoteId"] is None and payment["message"].startswith(message)
+        assert payment.get("checkoutUrl") == payload.get("checkoutUrl")
+        assert request(payment_path, customer_id=other_customer)[0] == 404
+        assert request(payment_path + "/read", method="PATCH", customer_id=other_customer)[0] == 404
+        assert request(payment_path)[1]["read"] is False
+        status, read_payment = request(payment_path + "/read", method="PATCH")
+        assert status == 200 and read_payment["read"] is True
+        send(payment_event)
+        eventually(queue_drained, "payment redelivery acknowledged")
+        assert request(payment_path)[1]["updatedAt"] == read_payment["updatedAt"]
+        assert any(n["id"] == payment["id"] for n in request("/service-orders")[1]["items"])
+        assert all(n["id"] != payment["id"]
+                   for n in request("/service-orders", customer_id=other_customer)[1]["items"])
     print(json.dumps({"status": "PASS", "checks": ["SNS FIFO to SQS FIFO with raw envelope", "SNS type filter", "invalid payload retry and DLQ", "independent group progress", "manual DLQ repair and replay", "JWT issuer", "JWT signature", "core employee role contract", "pagination validation", "anonymous stock denied",
         "StockLow consumption", "PATCH read", "redelivery preserves read and updatedAt", "DynamoDB persistence",
         "TypeIndex listing", "QuoteSentForApproval consumption without SNS attributes", "QuoteCreated filtered and ignored when delivered directly", "stock failure without approval creates no quote notification", "invalid approval event retry, DLQ and replay", "core message and DTO fields", "wrong-type GET/PATCH 404 both directions",
         "wrong-type PATCH preserves state", "missing-id GET/PATCH 404 both categories", "authenticated quote read route",
         "quote redelivery preserves read and updatedAt", "both unread lists reflect read state", "all four HTTP routes paginate without missing or duplicate records",
-        "Swagger UI and eight OpenAPI operations", "OpenAPI Bearer requirements and HTTP response schemas"], "stockNotificationId": event_id,
+        "Swagger UI and eight OpenAPI operations", "OpenAPI Bearer requirements and HTTP response schemas",
+        "payment checkout, confirmation, failure and expiry through SNS/SQS with customer isolation and redelivery"], "stockNotificationId": event_id,
         "quoteNotificationId": quote["eventId"]}, indent=2), flush=True)
 
 

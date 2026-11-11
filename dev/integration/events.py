@@ -44,7 +44,9 @@ def assert_quote_subscription():
     assert len(notification) == 1, "Expected one Billing subscription for Notification"
     attrs = sns.get_subscription_attributes(SubscriptionArn=notification[0]["SubscriptionArn"])["Attributes"]
     assert attrs["FilterPolicyScope"] == "MessageBody"
-    assert json.loads(attrs["FilterPolicy"]) == {"type": ["QuoteSentForApproval"]}
+    assert set(json.loads(attrs["FilterPolicy"])["type"]) == {
+        "QuoteSentForApproval", "PaymentCheckoutCreated", "PaymentConfirmed", "PaymentFailed",
+    }
     assert attrs["RawMessageDelivery"] == "true"
 
 

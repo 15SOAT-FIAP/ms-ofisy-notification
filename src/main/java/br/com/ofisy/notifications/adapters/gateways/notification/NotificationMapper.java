@@ -12,6 +12,7 @@ public final class NotificationMapper {
         entity.setId(notification.getId().toString());
         entity.setReferenceId(notification.getReferenceId().toString());
         entity.setType(notification.getType().name());
+        entity.setCheckoutUrl(notification.getCheckoutUrl());
         if (notification.getCustomerId() != null) {
             entity.setCustomerId(notification.getCustomerId().toString());
         }
@@ -35,7 +36,8 @@ public final class NotificationMapper {
                 entity.getCreatedAt(),
                 entity.getUpdatedAt(),
                 parseUuid(entity.getServiceOrderId()),
-                parseUuid(entity.getCustomerId())
+                parseUuid(entity.getCustomerId()),
+                entity.getCheckoutUrl()
         );
     }
 
