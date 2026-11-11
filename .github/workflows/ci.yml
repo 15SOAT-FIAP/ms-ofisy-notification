@@ -25,8 +25,36 @@ jobs:
           distribution: ${{ env.JAVA_DISTRIBUTION }}
           cache: maven
 
-      - name: Build & Test
-        run: mvn -B verify --no-transfer-progress
+      - name: Start isolated AWS services
+        run: docker compose -p ofisy-ci -f dev/integration/compose.yml up -d --wait localstack
+
+      - name: Build & Test including DynamoDB integrations
+        env:
+          DYNAMODB_TEST_ENDPOINT: http://127.0.0.1:14566
+        run: mvn -B clean verify --no-transfer-progress
+
+      - name: Require integrations without skipped tests
+        run: python3 dev/integration/assert_reports.py
+
+      - name: Exercise SNS, SQS, DLQ and secured HTTP
+        run: |
+          docker compose -p ofisy-ci -f dev/integration/compose.yml up -d --build app
+          docker compose -p ofisy-ci -f dev/integration/compose.yml run --rm --build --no-deps smoke
+
+      - name: Collect integration logs and stop containers
+        if: always()
+        run: |
+          docker compose -p ofisy-ci -f dev/integration/compose.yml logs --no-color > integration-compose.log
+          docker compose -p ofisy-ci -f dev/integration/compose.yml down
+
+      - name: Upload test evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-evidence
+          path: |
+            target/surefire-reports/
+            integration-compose.log
 
       - name: Upload JAR artifact
         uses: actions/upload-artifact@v4

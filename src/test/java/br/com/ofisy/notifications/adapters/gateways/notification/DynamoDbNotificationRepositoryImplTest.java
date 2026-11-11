@@ -130,14 +130,14 @@ class DynamoDbNotificationRepositoryImplTest {
     @Test
     void findAllByType_shouldMapItemsAndNextKey() {
         DynamoDbNotificationEntity entity = entity(NotificationType.LOW_STOCK);
-        Map<String, AttributeValue> lastKey = Map.of("id", AttributeValue.builder().s(entity.getId()).build());
+        Map<String, AttributeValue> lastKey = Map.of("id", AttributeValue.builder().s(entity.getId()).build(), "type", AttributeValue.builder().s(entity.getType()).build(), "createdAt", AttributeValue.builder().s(entity.getCreatedAt().toString()).build());
         stubQuery(List.of(Page.create(List.of(entity), lastKey)));
 
         PaginatedResult<Notification> result = repository.findAllByType(NotificationType.LOW_STOCK, 10, null);
 
         assertThat(result.getItems()).hasSize(1);
         assertThat(result.getItems().get(0).getStockId()).isEqualTo(UUID.fromString(entity.getReferenceId()));
-        assertThat(DynamoDbPaginationCursor.decode(result.getNextCursor())).containsEntry("id", entity.getId());
+        assertThat(DynamoDbPaginationCursor.decode(result.getNextCursor(), NotificationType.LOW_STOCK, false)).containsEntry("id", entity.getId());
         assertThat(lastRequest.get().limit()).isEqualTo(10);
         assertThat(lastRequest.get().scanIndexForward()).isFalse();
         assertThat(lastRequest.get().filterExpression()).isNull();
@@ -149,19 +149,19 @@ class DynamoDbNotificationRepositoryImplTest {
         stubQuery(List.of(Page.create(List.of(), Collections.emptyMap())));
 
         PaginatedResult<Notification> result = repository.findUnreadByType(
-                NotificationType.QUOTE_GENERATED, 5, DynamoDbPaginationCursor.encode(Map.of("id", "abc")));
+                NotificationType.QUOTE_GENERATED, 5, DynamoDbPaginationCursor.encode(Map.of("id", "11111111-1111-1111-1111-111111111111", "type", "QUOTE_GENERATED", "createdAt", "2026-01-01T00:00:00"), NotificationType.QUOTE_GENERATED, true));
 
         assertThat(result.getItems()).isEmpty();
         assertThat(result.getNextCursor()).isNull();
         assertThat(lastRequest.get().filterExpression().expression()).isEqualTo("#r = :readVal");
-        assertThat(lastRequest.get().exclusiveStartKey()).containsEntry("id", AttributeValue.builder().s("abc").build());
+        assertThat(lastRequest.get().exclusiveStartKey()).containsEntry("id", AttributeValue.builder().s("11111111-1111-1111-1111-111111111111").build());
     }
 
     @Test
     void findAllByType_shouldReturnEmptyWhenNoPages() {
         stubQuery(List.of());
 
-        PaginatedResult<Notification> result = repository.findAllByType(NotificationType.LOW_STOCK, 10, "");
+        PaginatedResult<Notification> result = repository.findAllByType(NotificationType.LOW_STOCK, 10, null);
 
         assertThat(result.getItems()).isEmpty();
         assertThat(result.getNextCursor()).isNull();

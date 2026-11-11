@@ -76,7 +76,7 @@ public class DynamoDbNotificationRepositoryImpl implements NotificationRepositor
     @Override
     public PaginatedResult<Notification> findAllByType(NotificationType type, int limit, String cursor) {
         QueryConditional queryConditional = QueryConditional.keyEqualTo(Key.builder().partitionValue(type.name()).build());
-        return executeQuery(queryConditional, null, limit, cursor);
+        return executeQuery(queryConditional, null, limit, cursor, type);
     }
 
     @Override
@@ -88,11 +88,11 @@ public class DynamoDbNotificationRepositoryImpl implements NotificationRepositor
                 .putExpressionValue(":readVal", AttributeValue.builder().bool(false).build())
                 .build();
                 
-        return executeQuery(queryConditional, filterExpression, limit, cursor);
+        return executeQuery(queryConditional, filterExpression, limit, cursor, type);
     }
 
-    private PaginatedResult<Notification> executeQuery(QueryConditional conditional, Expression filter, int limit, String cursor) {
-        Map<String, String> startKeyMap = DynamoDbPaginationCursor.decode(cursor);
+    private PaginatedResult<Notification> executeQuery(QueryConditional conditional, Expression filter, int limit, String cursor, NotificationType type) {
+        Map<String, String> startKeyMap = DynamoDbPaginationCursor.decode(cursor, type, filter != null);
         Map<String, AttributeValue> startKey = null;
         if (startKeyMap != null && !startKeyMap.isEmpty()) {
             startKey = new HashMap<>();
@@ -130,7 +130,7 @@ public class DynamoDbNotificationRepositoryImpl implements NotificationRepositor
             }
         }
 
-        return new PaginatedResult<>(notifications, DynamoDbPaginationCursor.encode(nextKeyMap));
+        return new PaginatedResult<>(notifications, DynamoDbPaginationCursor.encode(nextKeyMap, type, filter != null));
     }
 
 }

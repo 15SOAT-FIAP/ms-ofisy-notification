@@ -25,7 +25,7 @@ O listener traduz o envelope SQS para commands e não constrói entidades nem es
 As interfaces de criação preservam `execute(command)` do core. A extensão separada `executeEvent(eventId, command)`
 usa o identificador do evento para a inserção condicional; uma duplicata não atualiza um registro existente.
 Mantemos a adaptação de listagens por cursor para DynamoDB, com `items` e `nextToken`, em vez de listas sem paginação.
-A resposta restaura os campos `stockId` e `quoteId` do core; `referenceId` permanece como alias aditivo da migração.
+A resposta expõe `stockId` e `quoteId` conforme o contrato do core. O `referenceId` é usado internamente e na persistência.
 DynamoDB substitui JPA conforme ADR-0013; portanto não copiamos entidades JPA, Flyway ou transações relacionais.
 A criação por evento usa operação condicional; atualização de leitura é uma operação distinta.
 
