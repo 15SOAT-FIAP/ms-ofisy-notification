@@ -3,6 +3,7 @@ package br.com.ofisy.notifications.adapters.controllers.notification;
 import br.com.ofisy.notifications.adapters.controllers.notification.dto.NotificationResponseDTO;
 import br.com.ofisy.notifications.adapters.controllers.notification.dto.PaginatedResponseDTO;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -27,7 +28,7 @@ public interface NotificationApi {
     @Operation(summary = "Consultar uma notificação de ordem de serviço", security = @SecurityRequirement(name = BEARER_TOKEN))
     @ApiResponse(responseCode = "404", description = "Notificação de ordem de serviço não encontrada")
     @GetMapping("/service-orders/{id}")
-    ResponseEntity<NotificationResponseDTO> findServiceOrderById(@PathVariable UUID id, @io.swagger.v3.oas.annotations.Parameter(hidden = true) @RequestHeader("X-Customer-Id") UUID customerId);
+    ResponseEntity<NotificationResponseDTO> findServiceOrderById(@PathVariable UUID id, @Parameter(hidden = true) @RequestHeader("X-Customer-Id") UUID customerId);
 
     @Operation(summary = "Marcar uma notificação de estoque como lida", security = @SecurityRequirement(name = BEARER_TOKEN))
     @ApiResponse(responseCode = "401", description = "Autenticação necessária")
@@ -39,7 +40,7 @@ public interface NotificationApi {
     @Operation(summary = "Marcar uma notificação de ordem de serviço como lida", security = @SecurityRequirement(name = BEARER_TOKEN))
     @ApiResponse(responseCode = "404", description = "Notificação de ordem de serviço não encontrada")
     @PatchMapping("/service-orders/{id}/read")
-    ResponseEntity<NotificationResponseDTO> markServiceOrderAsRead(@PathVariable UUID id, @io.swagger.v3.oas.annotations.Parameter(hidden = true) @RequestHeader("X-Customer-Id") UUID customerId);
+    ResponseEntity<NotificationResponseDTO> markServiceOrderAsRead(@PathVariable UUID id, @Parameter(hidden = true) @RequestHeader("X-Customer-Id") UUID customerId);
 
     @Operation(summary = "Listar notificações de estoque", security = @SecurityRequirement(name = BEARER_TOKEN))
     @ApiResponse(responseCode = "400", description = "Limite ou cursor inválido")
@@ -58,10 +59,10 @@ public interface NotificationApi {
     @Operation(summary = "Listar notificações de ordens de serviço", security = @SecurityRequirement(name = BEARER_TOKEN))
     @ApiResponse(responseCode = "400", description = "Limite ou cursor inválido")
     @GetMapping("/service-orders")
-    ResponseEntity<PaginatedResponseDTO<NotificationResponseDTO>> findAllServiceOrders(@io.swagger.v3.oas.annotations.Parameter(hidden = true) @RequestHeader("X-Customer-Id") UUID customerId, @RequestParam(defaultValue="50") int limit, @RequestParam(required=false) String nextToken);
+    ResponseEntity<PaginatedResponseDTO<NotificationResponseDTO>> findAllServiceOrders(@Parameter(hidden = true) @RequestHeader("X-Customer-Id") UUID customerId, @RequestParam(defaultValue="50") int limit, @RequestParam(required=false) String nextToken);
 
     @Operation(summary = "Listar notificações de ordens de serviço não lidas", security = @SecurityRequirement(name = BEARER_TOKEN))
     @ApiResponse(responseCode = "400", description = "Limite ou cursor inválido")
     @GetMapping("/service-orders/unread")
-    ResponseEntity<PaginatedResponseDTO<NotificationResponseDTO>> findUnreadServiceOrders(@io.swagger.v3.oas.annotations.Parameter(hidden = true) @RequestHeader("X-Customer-Id") UUID customerId, @RequestParam(defaultValue="50") int limit, @RequestParam(required=false) String nextToken);
+    ResponseEntity<PaginatedResponseDTO<NotificationResponseDTO>> findUnreadServiceOrders(@Parameter(hidden = true) @RequestHeader("X-Customer-Id") UUID customerId, @RequestParam(defaultValue="50") int limit, @RequestParam(required=false) String nextToken);
 }
