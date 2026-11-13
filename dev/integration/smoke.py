@@ -13,7 +13,7 @@ import boto3
 from botocore.config import Config
 from events import assert_quote_subscription
 
-ORIGIN = "http://app:8081"
+ORIGIN = "http://app:8080"
 API_PATH = "/api/v1/notifications"
 BASE = ORIGIN + API_PATH
 SECRET = os.environ["JWT_SECRET"]
