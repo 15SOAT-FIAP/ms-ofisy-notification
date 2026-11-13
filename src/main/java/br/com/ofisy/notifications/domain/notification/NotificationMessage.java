@@ -44,6 +44,25 @@ public final class NotificationMessage {
         return new NotificationMessage(content);
     }
 
+    public static NotificationMessage forPaymentCheckout(UUID orderId, BigDecimal amount) {
+        return new NotificationMessage(String.format(Locale.US,
+                "Pagamento disponível para a ordem de serviço '%s'. Valor: R$ %.2f", orderId, amount));
+    }
+
+    public static NotificationMessage forPaymentConfirmed(UUID orderId, BigDecimal amount) {
+        return new NotificationMessage(String.format(Locale.US,
+                "Pagamento confirmado para a ordem de serviço '%s'. Valor: R$ %.2f", orderId, amount));
+    }
+
+    public static NotificationMessage forPaymentFailed(UUID orderId, String reason) {
+        String status = switch (reason) {
+            case "FAILED" -> "recusado";
+            case "EXPIRED" -> "expirado";
+            default -> throw new IllegalArgumentException("Unsupported payment failure reason");
+        };
+        return new NotificationMessage("Pagamento " + status + " para a ordem de serviço '" + orderId + "'.");
+    }
+
     public String getContent() {
         return content;
     }

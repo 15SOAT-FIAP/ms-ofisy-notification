@@ -102,21 +102,28 @@ class NotificationArchitectureIntegrationTest {
 
         UUID owner = UUID.randomUUID();
         UUID other = UUID.randomUUID();
-        var owned = Notification.createForQuote(UUID.randomUUID(), UUID.randomUUID(),
-                NotificationMessage.fromString("Orçamento com titular"), UUID.randomUUID(), owner);
+        UUID paymentId = UUID.randomUUID();
+        String checkoutUrl = "https://www.mercadopago.com.br/checkout/v1/redirect";
+        var owned = Notification.createForPayment(UUID.randomUUID(), NotificationType.PAYMENT_CHECKOUT_CREATED,
+                paymentId, UUID.randomUUID(), owner, NotificationMessage.fromString("Pagamento disponível"), checkoutUrl);
         repository.save(owned);
         String orders = "/api/v1/notifications/service-orders";
         String detail = orders + "/" + owned.getId();
         for (String listing : List.of(orders, orders + "/unread")) {
             mvc.perform(get(listing).header("X-Customer-Id", owner))
-                    .andExpect(status().isOk()).andExpect(jsonPath("$.items[0].id").value(owned.getId().toString()));
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.items[0].id").value(owned.getId().toString()))
+                    .andExpect(jsonPath("$.items[0].checkoutUrl").value(checkoutUrl));
             mvc.perform(get(listing).header("X-Customer-Id", other))
                     .andExpect(status().isOk()).andExpect(jsonPath("$.items").isEmpty());
         }
         mvc.perform(get(detail).header("X-Customer-Id", other)).andExpect(status().isNotFound());
         mvc.perform(patch(detail + "/read").header("X-Customer-Id", other)).andExpect(status().isNotFound());
         mvc.perform(get(detail).header("X-Customer-Id", owner))
-                .andExpect(status().isOk()).andExpect(jsonPath("$.read").value(false));
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.paymentId").value(paymentId.toString()))
+                .andExpect(jsonPath("$.checkoutUrl").value(checkoutUrl))
+                .andExpect(jsonPath("$.read").value(false));
         mvc.perform(patch(detail + "/read").header("X-Customer-Id", owner))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.read").value(true));
     }

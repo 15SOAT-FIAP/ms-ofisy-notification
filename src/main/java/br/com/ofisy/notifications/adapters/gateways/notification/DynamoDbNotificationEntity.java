@@ -14,6 +14,7 @@ public class DynamoDbNotificationEntity {
     private String type;
     private String customerId;
     private String serviceOrderId;
+    private String checkoutUrl;
     private String message;
     private Boolean read;
     private LocalDateTime createdAt;
@@ -77,6 +78,14 @@ public class DynamoDbNotificationEntity {
 
     public void setServiceOrderId(String serviceOrderId) {
         this.serviceOrderId = serviceOrderId;
+    }
+
+    public String getCheckoutUrl() {
+        return checkoutUrl;
+    }
+
+    public void setCheckoutUrl(String checkoutUrl) {
+        this.checkoutUrl = checkoutUrl;
     }
 
     @DynamoDbSecondarySortKey(indexNames = {"TypeIndex", "CustomerIdIndex"})

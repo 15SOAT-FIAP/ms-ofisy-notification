@@ -168,12 +168,13 @@ class NotificationEventListenerIT {
     }
 
     @Test
-    void shouldRouteOnlyApprovalEventsFromBillingSnsWithoutMessageAttributes() {
+    void shouldRouteSupportedEventsFromBillingSnsWithoutMessageAttributes() {
         var subscription = sns.listSubscriptionsByTopic(r -> r.topicArn(billingTopic)).subscriptions().getFirst();
         var attrs = sns.getSubscriptionAttributes(r -> r.subscriptionArn(subscription.subscriptionArn())).attributes();
         assertThat(attrs.get("FilterPolicyScope")).isEqualTo("MessageBody");
         assertThat(JSON.readTree(attrs.get("FilterPolicy")))
-                .isEqualTo(JSON.valueToTree(Map.of("type", new String[] {APPROVAL})));
+                .isEqualTo(JSON.valueToTree(Map.of("type", new String[] {
+                        APPROVAL, "PaymentCheckoutCreated", "PaymentConfirmed", "PaymentFailed"})));
         assertThat(attrs.get("RawMessageDelivery")).isEqualTo("true");
 
         var orderId = UUID.randomUUID();
@@ -190,6 +191,39 @@ class NotificationEventListenerIT {
         assertThat(repository.findById(premature)).isEmpty();
         assertThat(repository.findById(cancelled)).isEmpty();
         assertThat(repository.findById(failed)).isEmpty();
+    }
+
+    @Test
+    void shouldPersistPaymentEventsFromBillingSnsForTheOrderOwner() {
+        var orderId = UUID.randomUUID();
+        var paymentId = UUID.randomUUID();
+        var checkout = UUID.randomUUID();
+        var confirmed = UUID.randomUUID();
+        var failed = UUID.randomUUID();
+        var expired = UUID.randomUUID();
+        var url = "https://www.mercadopago.com.br/checkout/v1/redirect?order_id=local";
+
+        publish(billingTopic, "PaymentCheckoutCreated", checkout, orderId,
+                Map.of("paymentId", paymentId.toString(), "amount", new BigDecimal("250.00"), "checkoutUrl", url));
+        publish(billingTopic, "PaymentConfirmed", confirmed, orderId,
+                Map.of("paymentId", paymentId.toString(), "amount", new BigDecimal("250.00")));
+        publish(billingTopic, "PaymentFailed", failed, orderId,
+                Map.of("paymentId", UUID.randomUUID().toString(), "reason", "FAILED", "statusDetail", "rejected_by_issuer"));
+        publish(billingTopic, "PaymentFailed", expired, orderId,
+                Map.of("paymentId", UUID.randomUUID().toString(), "reason", "EXPIRED"));
+
+        var checkoutNotice = received(checkout);
+        assertThat(checkoutNotice.getType()).isEqualTo(NotificationType.PAYMENT_CHECKOUT_CREATED);
+        assertThat(checkoutNotice.getCheckoutUrl()).isEqualTo(url);
+        assertThat(checkoutNotice.getPaymentId()).isEqualTo(paymentId);
+        assertThat(checkoutNotice.getCustomerId()).isEqualTo(CUSTOMER);
+        assertThat(checkoutNotice.getServiceOrderId()).isEqualTo(orderId);
+        assertThat(received(confirmed).getType()).isEqualTo(NotificationType.PAYMENT_CONFIRMED);
+        assertThat(received(failed).getMessage().getContent()).contains("Pagamento recusado");
+        assertThat(received(expired).getMessage().getContent()).contains("Pagamento expirado");
+        assertThat(repository.markServiceOrderAsRead(checkout, UUID.randomUUID())).isEmpty();
+        assertThat(repository.markServiceOrderAsRead(checkout, CUSTOMER)).hasValueSatisfying(notice ->
+                assertThat(notice.isRead()).isTrue());
     }
 
     @Test

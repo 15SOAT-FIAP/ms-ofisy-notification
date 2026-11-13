@@ -28,8 +28,8 @@ awslocal sqs set-queue-attributes --queue-url "$queue" --attributes \
 
 subscribe() {
   awslocal sns subscribe --topic-arn "$1" --protocol sqs --notification-endpoint "$queue_arn" \
-    --attributes "{\"RawMessageDelivery\":\"true\",\"FilterPolicyScope\":\"MessageBody\",\"FilterPolicy\":\"{\\\"type\\\":[\\\"$2\\\"]}\"}" >/dev/null
+    --attributes "{\"RawMessageDelivery\":\"true\",\"FilterPolicyScope\":\"MessageBody\",\"FilterPolicy\":\"{\\\"type\\\":[$2]}\"}" >/dev/null
 }
 
-subscribe "$stock" StockLow
-subscribe "$billing" QuoteSentForApproval
+subscribe "$stock" '\"StockLow\"'
+subscribe "$billing" '\"QuoteSentForApproval\",\"PaymentCheckoutCreated\",\"PaymentConfirmed\",\"PaymentFailed\"'
