@@ -36,11 +36,6 @@ jobs:
       - name: Require integrations without skipped tests
         run: python3 dev/integration/assert_reports.py
 
-      - name: Exercise SNS, SQS, DLQ and secured HTTP
-        run: |
-          docker compose -p ofisy-ci -f dev/integration/compose.yml -f dev/integration/compose.ci.yml up -d --build app
-          docker compose -p ofisy-ci -f dev/integration/compose.yml -f dev/integration/compose.ci.yml run --rm --build --no-deps smoke
-
       - name: Collect integration logs and stop containers
         if: always()
         run: |

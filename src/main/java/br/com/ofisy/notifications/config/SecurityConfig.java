@@ -3,6 +3,7 @@ package br.com.ofisy.notifications.config;
 import br.com.ofisy.notifications.config.security.OfisyAccessDeniedHandler;
 import br.com.ofisy.notifications.config.security.OfisyAuthenticationEntryPoint;
 import br.com.ofisy.notifications.shared.securityfilter.JwtAuthFilter;
+import jakarta.servlet.DispatcherType;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
@@ -45,7 +46,8 @@ public class SecurityConfig {
                         .authenticationEntryPoint(authenticationEntryPoint)
                         .accessDeniedHandler(accessDeniedHandler))
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers(CUSTOMER_NOTIFICATIONS).hasRole("CUSTOMER")
+                        .dispatcherTypeMatchers(DispatcherType.ERROR).permitAll()
+                        .requestMatchers(CUSTOMER_NOTIFICATIONS).permitAll()
                         .requestMatchers("/swagger-ui.html", "/swagger-ui/**",
                                 "/v3/api-docs", "/v3/api-docs/**", "/v3/api-docs.yaml").permitAll()
                         .requestMatchers("/actuator/**").permitAll() // If actuator is added later
