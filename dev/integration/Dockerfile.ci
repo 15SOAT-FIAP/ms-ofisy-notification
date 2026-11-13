@@ -5,5 +5,5 @@ RUN addgroup -S app && adduser -S app -G app
 WORKDIR /app
 COPY --chown=app:app target/*.jar app.jar
 USER app
-EXPOSE 8081
+EXPOSE 8080
 ENTRYPOINT ["java", "-jar", "app.jar"]

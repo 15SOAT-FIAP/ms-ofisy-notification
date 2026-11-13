@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ms-ofisy-notification-config
+data:
+  APP_JWT_ISSUER: "techchallenge-ofisy-api"
+  JAVA_TOOL_OPTIONS: "-javaagent:/app/dd-java-agent.jar -XX:MaxRAMPercentage=75"
+  DD_SERVICE: "ms-ofisy-notification"
+  DD_ENV: "production"
+  DD_VERSION: "<IMAGE_TAG>"
+  DD_METRICS_ENABLED: "true"
+  DD_LOGS_INJECTION: "true"
+  DD_TRACE_AGENT_PORT: "8126"
