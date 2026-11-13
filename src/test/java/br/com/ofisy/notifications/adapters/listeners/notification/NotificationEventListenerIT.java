@@ -23,7 +23,6 @@ import org.testcontainers.containers.wait.strategy.Wait;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.localstack.LocalStackContainer;
-import org.testcontainers.images.builder.Transferable;
 import org.testcontainers.utility.DockerImageName;
 import org.testcontainers.utility.MountableFile;
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
@@ -62,13 +61,10 @@ class NotificationEventListenerIT {
     static final LocalStackContainer AWS = new LocalStackContainer(DockerImageName.parse("localstack/localstack:4.9.0"))
             .withServices("sns", "sqs", "dynamodb")
             .withEnv("SQS_ENDPOINT_STRATEGY", "dynamic")
-            .withEnv("LOCALSTACK_ENDPOINT", "http://localhost:4566")
             .withEnv("AWS_DEFAULT_REGION", "us-east-1")
             .withEnv("AWS_ACCESS_KEY_ID", "test")
             .withEnv("AWS_SECRET_ACCESS_KEY", "test")
-            .withCopyFileToContainer(MountableFile.forHostPath("dev/integration/bootstrap.py", 0755),
-                    "/opt/ofisy/bootstrap.py")
-            .withCopyToContainer(Transferable.of("#!/bin/sh\nset -eu\npython /opt/ofisy/bootstrap.py\n", 0755),
+            .withCopyFileToContainer(MountableFile.forHostPath("dev/integration/init-aws.sh", 0755),
                     "/etc/localstack/init/ready.d/01-bootstrap.sh")
             .waitingFor(Wait.forHttp("/_localstack/init/ready").forPort(4566)
                     .forResponsePredicate(body -> JSON.readTree(body).path("completed").asBoolean()

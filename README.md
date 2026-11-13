@@ -34,17 +34,17 @@ Defina `APP_JWT_ISSUER` com o issuer exato do token de funcionário emitido pelo
 subject e a claim `role` singular antes de converter o perfil em uma autoridade Spring.
 
 Nas quatro rotas de ordem de serviço, o Gateway sobrescreve `X-Customer-Id` com a
-identidade autenticada pelo Lambda Authorizer. O Notification valida o JWT de cliente
-emitido por `techchallenge-ofisy-auth` e confere se o subject coincide com o header.
-Configure `APP_JWT_CUSTOMER_SECRET` se a Lambda usar uma chave distinta de `JWT_SECRET`.
+identidade autenticada pelo Lambda Authorizer. O Notification recebe esse header
+obrigatório e aplica a autorização por titularidade. No deploy, restrinja o acesso
+às quatro rotas ao Gateway para que somente ele possa fornecer essa identidade.
 As listagens e os cursores ficam restritos ao cliente. Consulta por ID e marcação de
 leitura retornam `404` quando a notificação pertence a outra pessoa. As rotas de estoque
 exigem JWT de funcionário com perfil ADMIN ou STOCKMAN.
 
 Ao consumir `QuoteSentForApproval`, o serviço resolve o cliente da OS pelo Core.
 Configure `APP_CORE_BASE_URL` e `APP_CORE_SERVICE_TOKEN` para usar a rota autenticada
-`GET /api/v1/service-orders/{id}/customer`. O Compose independente usa uma fixture
-de Core. Para registros anteriores, consulte o [guia de backfill](dev/integration/README.md#backfill-de-titularidade).
+`GET /api/v1/service-orders/{id}/customer`. Os registros sem titular associado ficam
+fora das rotas de cliente.
 
 ## Eventos consumidos e ambiente local
 

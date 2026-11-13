@@ -1,6 +1,0 @@
-# Apply after compose.yml, only after Maven clean verify and the report gate pass.
-services:
-  app:
-    build:
-      context: ../..
-      dockerfile: dev/integration/Dockerfile.ci
