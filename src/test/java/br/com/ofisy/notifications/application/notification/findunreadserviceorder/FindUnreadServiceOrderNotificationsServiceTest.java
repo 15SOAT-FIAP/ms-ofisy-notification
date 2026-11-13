@@ -20,10 +20,11 @@ class FindUnreadServiceOrderNotificationsServiceTest {
 
     @Test
     void forwardsTypeLimitAndCursorAndReturnsPageUnchanged() {
+        var customerId = UUID.randomUUID();
         var cursor = "opaque-continuation-token";
         var page = new PaginatedResult<Notification>(List.of(notification), cursor);
-        when(repository.findUnreadByType(NotificationType.QUOTE_GENERATED, 17, cursor)).thenReturn(page);
-        assertThat(service.execute(17, cursor)).isSameAs(page);
-        verify(repository).findUnreadByType(NotificationType.QUOTE_GENERATED, 17, cursor);
+        when(repository.findServiceOrdersByCustomer(customerId, true, 17, cursor)).thenReturn(page);
+        assertThat(service.execute(customerId, 17, cursor)).isSameAs(page);
+        verify(repository).findServiceOrdersByCustomer(customerId, true, 17, cursor);
     }
 }

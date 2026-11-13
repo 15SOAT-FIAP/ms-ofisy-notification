@@ -51,6 +51,7 @@ def assert_quote_subscription():
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("scenario", choices=["stock", "quote", "quote-created", "stock-failure", "invalid", "status", "replay"])
+    parser.add_argument("--service-order-id", type=uuid.UUID, help="Order in the local Core for the quote scenario")
     args = parser.parse_args()
     sqs = client("sqs")
     if args.scenario == "status":
@@ -76,6 +77,10 @@ def main():
             print(json.dumps(body))
     else:
         body = event("QuoteSentForApproval" if args.scenario == "quote" else "StockLow")
+        if args.scenario == "quote":
+            if args.service_order_id is None:
+                parser.error("quote requires --service-order-id from the local Core")
+            body["serviceOrderId"] = str(args.service_order_id)
         if args.scenario == "quote-created":
             body = event("QuoteCreated")
         elif args.scenario == "stock-failure":

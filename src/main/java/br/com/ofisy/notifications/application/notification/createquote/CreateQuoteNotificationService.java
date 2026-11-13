@@ -10,9 +10,11 @@ import java.util.UUID;
 public class CreateQuoteNotificationService implements CreateQuoteNotificationUseCase {
 
     private final NotificationRepository notificationRepository;
+    private final ServiceOrderCustomerLookup customerLookup;
 
-    public CreateQuoteNotificationService(NotificationRepository notificationRepository) {
+    public CreateQuoteNotificationService(NotificationRepository notificationRepository, ServiceOrderCustomerLookup customerLookup) {
         this.notificationRepository = notificationRepository;
+        this.customerLookup = customerLookup;
     }
 
     @Override
@@ -22,7 +24,9 @@ public class CreateQuoteNotificationService implements CreateQuoteNotificationUs
                 command.serviceOrderId(),
                 command.totalPrice()
         );
-        Notification notification = Notification.createForQuote(eventId, command.quoteId(), message);
+        UUID customerId = customerLookup.findCustomerId(command.serviceOrderId());
+        Notification notification = Notification.createForQuote(eventId, command.quoteId(), message,
+                command.serviceOrderId(), customerId);
         return notificationRepository.createIfAbsent(notification);
     }
 }

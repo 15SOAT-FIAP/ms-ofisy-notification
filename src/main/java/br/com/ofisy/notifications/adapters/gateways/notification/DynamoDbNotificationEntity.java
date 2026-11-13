@@ -12,6 +12,8 @@ public class DynamoDbNotificationEntity {
     private String id;
     private String referenceId;
     private String type;
+    private String customerId;
+    private String serviceOrderId;
     private String message;
     private Boolean read;
     private LocalDateTime createdAt;
@@ -60,7 +62,24 @@ public class DynamoDbNotificationEntity {
         this.read = read;
     }
 
-    @DynamoDbSecondarySortKey(indexNames = {"TypeIndex"})
+    @DynamoDbSecondaryPartitionKey(indexNames = {"CustomerIdIndex"})
+    public String getCustomerId() {
+        return customerId;
+    }
+
+    public void setCustomerId(String customerId) {
+        this.customerId = customerId;
+    }
+
+    public String getServiceOrderId() {
+        return serviceOrderId;
+    }
+
+    public void setServiceOrderId(String serviceOrderId) {
+        this.serviceOrderId = serviceOrderId;
+    }
+
+    @DynamoDbSecondarySortKey(indexNames = {"TypeIndex", "CustomerIdIndex"})
     public LocalDateTime getCreatedAt() {
         return createdAt;
     }

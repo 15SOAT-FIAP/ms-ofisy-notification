@@ -16,6 +16,8 @@ import software.amazon.awssdk.enhanced.dynamodb.TableSchema;
 import software.amazon.awssdk.enhanced.dynamodb.model.Page;
 import software.amazon.awssdk.enhanced.dynamodb.model.PutItemEnhancedRequest;
 import software.amazon.awssdk.enhanced.dynamodb.model.QueryConditional;
+import software.amazon.awssdk.enhanced.dynamodb.model.IgnoreNullsMode;
+import software.amazon.awssdk.enhanced.dynamodb.model.UpdateItemEnhancedRequest;
 import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
 import software.amazon.awssdk.services.dynamodb.model.ConditionalCheckFailedException;
 
@@ -25,18 +27,21 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Collectors;
+import java.time.LocalDateTime;
 
 @Repository
 public class DynamoDbNotificationRepositoryImpl implements NotificationRepository {
 
     private final DynamoDbTable<DynamoDbNotificationEntity> table;
     private final DynamoDbIndex<DynamoDbNotificationEntity> typeIndex;
+    private final DynamoDbIndex<DynamoDbNotificationEntity> customerIndex;
 
     public DynamoDbNotificationRepositoryImpl(
             DynamoDbEnhancedClient enhancedClient,
             @Value("${app.aws.dynamodb.table-name:Notifications}") String tableName) {
         this.table = enhancedClient.table(tableName, TableSchema.fromBean(DynamoDbNotificationEntity.class));
         this.typeIndex = table.index("TypeIndex");
+        this.customerIndex = table.index("CustomerIdIndex");
     }
 
     @Override
@@ -75,24 +80,50 @@ public class DynamoDbNotificationRepositoryImpl implements NotificationRepositor
 
     @Override
     public PaginatedResult<Notification> findAllByType(NotificationType type, int limit, String cursor) {
-        QueryConditional queryConditional = QueryConditional.keyEqualTo(Key.builder().partitionValue(type.name()).build());
-        return executeQuery(queryConditional, null, limit, cursor, type);
+        return executeQuery(typeIndex, "type", type.name(), false, limit, cursor);
     }
 
     @Override
     public PaginatedResult<Notification> findUnreadByType(NotificationType type, int limit, String cursor) {
-        QueryConditional queryConditional = QueryConditional.keyEqualTo(Key.builder().partitionValue(type.name()).build());
-        Expression filterExpression = Expression.builder()
+        return executeQuery(typeIndex, "type", type.name(), true, limit, cursor);
+    }
+
+    @Override
+    public PaginatedResult<Notification> findServiceOrdersByCustomer(UUID customerId, boolean unread, int limit, String cursor) {
+        return executeQuery(customerIndex, "customerId", customerId.toString(), unread, limit, cursor);
+    }
+
+    @Override
+    public Optional<Notification> markServiceOrderAsRead(UUID id, UUID customerId) {
+        var update = new DynamoDbNotificationEntity();
+        update.setId(id.toString());
+        update.setRead(true);
+        update.setUpdatedAt(LocalDateTime.now());
+        var condition = Expression.builder()
+                .expression("#customer = :customer AND #type = :type")
+                .putExpressionName("#customer", "customerId")
+                .putExpressionName("#type", "type")
+                .putExpressionValue(":customer", AttributeValue.fromS(customerId.toString()))
+                .putExpressionValue(":type", AttributeValue.fromS(NotificationType.QUOTE_GENERATED.name()))
+                .build();
+        try {
+            return Optional.of(NotificationMapper.toDomain(table.updateItem(UpdateItemEnhancedRequest
+                    .builder(DynamoDbNotificationEntity.class).item(update)
+                    .ignoreNullsMode(IgnoreNullsMode.SCALAR_ONLY).conditionExpression(condition).build())));
+        } catch (ConditionalCheckFailedException denied) {
+            return Optional.empty();
+        }
+    }
+
+    private PaginatedResult<Notification> executeQuery(DynamoDbIndex<DynamoDbNotificationEntity> index,
+            String partitionKey, String partition, boolean unread, int limit, String cursor) {
+        QueryConditional conditional = QueryConditional.keyEqualTo(Key.builder().partitionValue(partition).build());
+        Expression filter = unread ? Expression.builder()
                 .expression("#r = :readVal")
                 .putExpressionName("#r", "read")
                 .putExpressionValue(":readVal", AttributeValue.builder().bool(false).build())
-                .build();
-                
-        return executeQuery(queryConditional, filterExpression, limit, cursor, type);
-    }
-
-    private PaginatedResult<Notification> executeQuery(QueryConditional conditional, Expression filter, int limit, String cursor, NotificationType type) {
-        Map<String, String> startKeyMap = DynamoDbPaginationCursor.decode(cursor, type, filter != null);
+                .build() : null;
+        Map<String, String> startKeyMap = DynamoDbPaginationCursor.decode(cursor, partitionKey, partition, unread);
         Map<String, AttributeValue> startKey = null;
         if (startKeyMap != null && !startKeyMap.isEmpty()) {
             startKey = new HashMap<>();
@@ -102,7 +133,7 @@ public class DynamoDbNotificationRepositoryImpl implements NotificationRepositor
         }
 
         Map<String, AttributeValue> finalStartKey = startKey;
-        SdkIterable<Page<DynamoDbNotificationEntity>> pagedResults = typeIndex.query(r -> {
+        SdkIterable<Page<DynamoDbNotificationEntity>> pagedResults = index.query(r -> {
             r.queryConditional(conditional).scanIndexForward(false).limit(limit);
             if (filter != null) {
                 r.filterExpression(filter);
@@ -130,7 +161,7 @@ public class DynamoDbNotificationRepositoryImpl implements NotificationRepositor
             }
         }
 
-        return new PaginatedResult<>(notifications, DynamoDbPaginationCursor.encode(nextKeyMap, type, filter != null));
+        return new PaginatedResult<>(notifications, DynamoDbPaginationCursor.encode(nextKeyMap, partition, unread));
     }
 
 }

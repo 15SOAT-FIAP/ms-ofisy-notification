@@ -46,7 +46,6 @@ public class JwtAuthFilter extends OncePerRequestFilter {
 
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
-        // Customer JWTs belong to the Gateway authorizer, not the employee identity/role contract.
         return NotificationRequestMatchers.CUSTOMER_NOTIFICATIONS.matches(request);
     }
 
@@ -62,9 +61,18 @@ public class JwtAuthFilter extends OncePerRequestFilter {
         }
 
         String token = authHeader.substring(BEARER.length());
-
         try {
-            Claims claims = Jwts.parser()
+            authenticateEmployee(request, token);
+        } catch (JwtException | IllegalArgumentException e) {
+            SecurityContextHolder.clearContext();
+            logger.warn("Invalid employee JWT");
+        }
+
+        filterChain.doFilter(request, response);
+    }
+
+    private void authenticateEmployee(HttpServletRequest request, String token) {
+        Claims claims = Jwts.parser()
                     .verifyWith(secretKey)
                     .requireIssuer(issuer)
                     .build()
@@ -77,23 +85,12 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                     || !(roleClaim instanceof String role) || !EMPLOYEE_ROLES.contains(role)) {
                 throw new IllegalArgumentException("Invalid employee token claims");
             }
-            {
-                var authorities = List.of(new SimpleGrantedAuthority("ROLE_" + role));
-
-                UsernamePasswordAuthenticationToken authentication =
-                        new UsernamePasswordAuthenticationToken(email, null, authorities);
-
-                authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
-
-                SecurityContextHolder.getContext().setAuthentication(authentication);
-            }
-        } catch (JwtException | IllegalArgumentException e) {
-            SecurityContextHolder.clearContext();
-            logger.warn("Invalid employee JWT");
-        }
-
-        filterChain.doFilter(request, response);
+        var authorities = List.of(new SimpleGrantedAuthority("ROLE_" + role));
+        var authentication = UsernamePasswordAuthenticationToken.authenticated(email, null, authorities);
+        authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+        SecurityContextHolder.getContext().setAuthentication(authentication);
     }
+
 }
 
 

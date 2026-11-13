@@ -18,6 +18,7 @@ import br.com.ofisy.notifications.config.SecurityConfig;
 import br.com.ofisy.notifications.config.security.OfisyAccessDeniedHandler;
 import br.com.ofisy.notifications.config.security.OfisyAuthenticationEntryPoint;
 import br.com.ofisy.notifications.domain.notification.Notification;
+import br.com.ofisy.notifications.domain.notification.NotificationMessage;
 import br.com.ofisy.notifications.domain.notification.NotificationRepository;
 import br.com.ofisy.notifications.domain.notification.NotificationType;
 import br.com.ofisy.notifications.shared.securityfilter.JwtAuthFilter;
@@ -89,8 +90,8 @@ class NotificationArchitectureIntegrationTest {
         assertThat(stored.isRead()).isTrue();
         assertThat(stored.getUpdatedAt()).isEqualTo(read.getUpdatedAt());
         String wrong="/api/v1/notifications/service-orders/"+notification.getId();
-        mvc.perform(get(wrong)).andExpect(status().isNotFound());
-        mvc.perform(patch(wrong+"/read")).andExpect(status().isNotFound());
+        mvc.perform(get(wrong)).andExpect(status().isBadRequest());
+        mvc.perform(patch(wrong+"/read")).andExpect(status().isBadRequest());
         var quote=Notification.create(UUID.randomUUID(),NotificationType.QUOTE_GENERATED,"Orçamento",UUID.randomUUID());
         repository.save(quote);
         mvc.perform(get("/api/v1/notifications/stock/"+quote.getId()).header("Authorization",authorization)).andExpect(status().isNotFound());
@@ -98,6 +99,26 @@ class NotificationArchitectureIntegrationTest {
         assertThat(repository.findById(quote.getId()).orElseThrow().isRead()).isFalse();
         mvc.perform(get("/api/v1/notifications/stock").param("limit", "10").header("Authorization", authorization))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.items[0].id").value(notification.getId().toString()));
+
+        UUID owner = UUID.randomUUID();
+        UUID other = UUID.randomUUID();
+        var owned = Notification.createForQuote(UUID.randomUUID(), UUID.randomUUID(),
+                NotificationMessage.fromString("Orçamento com titular"), UUID.randomUUID(), owner);
+        repository.save(owned);
+        String orders = "/api/v1/notifications/service-orders";
+        String detail = orders + "/" + owned.getId();
+        for (String listing : List.of(orders, orders + "/unread")) {
+            mvc.perform(get(listing).header("X-Customer-Id", owner))
+                    .andExpect(status().isOk()).andExpect(jsonPath("$.items[0].id").value(owned.getId().toString()));
+            mvc.perform(get(listing).header("X-Customer-Id", other))
+                    .andExpect(status().isOk()).andExpect(jsonPath("$.items").isEmpty());
+        }
+        mvc.perform(get(detail).header("X-Customer-Id", other)).andExpect(status().isNotFound());
+        mvc.perform(patch(detail + "/read").header("X-Customer-Id", other)).andExpect(status().isNotFound());
+        mvc.perform(get(detail).header("X-Customer-Id", owner))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.read").value(false));
+        mvc.perform(patch(detail + "/read").header("X-Customer-Id", owner))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.read").value(true));
     }
 
     private String token(String issuer) {
@@ -124,12 +145,16 @@ class NotificationArchitectureIntegrationTest {
         @Bean
         NotificationRepository repository(DynamoDbClient client) {
             client.createTable(r -> r.tableName(TABLE).billingMode(BillingMode.PAY_PER_REQUEST)
-                    .attributeDefinitions(attribute("id"), attribute("type"), attribute("createdAt"))
+                    .attributeDefinitions(attribute("id"), attribute("type"), attribute("createdAt"), attribute("customerId"))
                     .keySchema(KeySchemaElement.builder().attributeName("id").keyType(KeyType.HASH).build())
                     .globalSecondaryIndexes(GlobalSecondaryIndex.builder().indexName("TypeIndex")
                             .keySchema(KeySchemaElement.builder().attributeName("type").keyType(KeyType.HASH).build(),
                                     KeySchemaElement.builder().attributeName("createdAt").keyType(KeyType.RANGE).build())
-                            .projection(Projection.builder().projectionType(ProjectionType.ALL).build()).build()));
+                            .projection(Projection.builder().projectionType(ProjectionType.ALL).build()).build(),
+                            GlobalSecondaryIndex.builder().indexName("CustomerIdIndex")
+                                    .keySchema(KeySchemaElement.builder().attributeName("customerId").keyType(KeyType.HASH).build(),
+                                            KeySchemaElement.builder().attributeName("createdAt").keyType(KeyType.RANGE).build())
+                                    .projection(Projection.builder().projectionType(ProjectionType.ALL).build()).build()));
             return new DynamoDbNotificationRepositoryImpl(DynamoDbEnhancedClient.builder().dynamoDbClient(client).build(), TABLE);
         }
 

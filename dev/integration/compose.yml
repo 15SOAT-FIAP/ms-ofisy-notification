@@ -13,15 +13,15 @@ services:
       timeout: 3s
       retries: 40
   bootstrap:
-    build:
-      context: .
-      dockerfile: Dockerfile.tools
-    command: ["python", "/tools/bootstrap.py"]
+    image: localstack/localstack:4.9.0
+    entrypoint: ["/bin/sh", "/init-aws.sh"]
+    volumes: ["./init-aws.sh:/init-aws.sh:ro"]
     environment: &aws
       AWS_ACCESS_KEY_ID: test
       AWS_SECRET_ACCESS_KEY: test
       AWS_DEFAULT_REGION: us-east-1
       AWS_EC2_METADATA_DISABLED: "true"
+      LOCALSTACK_ENDPOINT: http://localstack:4566
     depends_on:
       localstack:
         condition: service_healthy
@@ -41,17 +41,16 @@ services:
       AWS_EC2_METADATA_DISABLED: "true"
       JWT_SECRET: ${JWT_SECRET:-local-development-only-secret-at-least-32-bytes}
       APP_JWT_ISSUER: techchallenge-ofisy-api
+      APP_CORE_BASE_URL: ${APP_CORE_BASE_URL:-http://host.docker.internal:8080}
+      APP_CORE_SERVICE_TOKEN: ${APP_CORE_SERVICE_TOKEN:-}
     depends_on:
       bootstrap:
         condition: service_completed_successfully
-  smoke:
+  tools:
     build:
       context: .
       dockerfile: Dockerfile.tools
-    command: ["python", "/tools/smoke.py"]
-    environment:
-      <<: *aws
-      JWT_SECRET: ${JWT_SECRET:-local-development-only-secret-at-least-32-bytes}
-      APP_JWT_ISSUER: techchallenge-ofisy-api
+    entrypoint: ["python", "/tools/events.py"]
+    environment: *aws
     profiles: [test]
     depends_on: [app]

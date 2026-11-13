@@ -12,6 +12,12 @@ public final class NotificationMapper {
         entity.setId(notification.getId().toString());
         entity.setReferenceId(notification.getReferenceId().toString());
         entity.setType(notification.getType().name());
+        if (notification.getCustomerId() != null) {
+            entity.setCustomerId(notification.getCustomerId().toString());
+        }
+        if (notification.getServiceOrderId() != null) {
+            entity.setServiceOrderId(notification.getServiceOrderId().toString());
+        }
         entity.setMessage(notification.getMessage().getContent());
         entity.setRead(notification.isRead());
         entity.setCreatedAt(notification.getCreatedAt());
@@ -27,7 +33,13 @@ public final class NotificationMapper {
                 UUID.fromString(entity.getReferenceId()),
                 entity.getRead(),
                 entity.getCreatedAt(),
-                entity.getUpdatedAt()
+                entity.getUpdatedAt(),
+                parseUuid(entity.getServiceOrderId()),
+                parseUuid(entity.getCustomerId())
         );
+    }
+
+    private static UUID parseUuid(String value) {
+        return value == null ? null : UUID.fromString(value);
     }
 }

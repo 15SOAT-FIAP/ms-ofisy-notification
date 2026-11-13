@@ -9,11 +9,12 @@ class FindServiceOrderNotificationByIdServiceTest {
     private final NotificationRepository repository=mock(NotificationRepository.class);
     private final FindServiceOrderNotificationByIdService service=new FindServiceOrderNotificationByIdService(repository);
     private final UUID id=UUID.randomUUID();
+    private final UUID customerId=UUID.randomUUID();
     @Test void acceptsExpectedType() {
-        var notification=Notification.create(id,NotificationType.QUOTE_GENERATED,"Mensagem",UUID.randomUUID());
+        var notification=Notification.createForQuote(id, UUID.randomUUID(), NotificationMessage.fromString("Mensagem"), UUID.randomUUID(), customerId);
         when(repository.findById(id)).thenReturn(Optional.of(notification));
         
-        assertThat(service.execute(id)).isSameAs(notification);
+        assertThat(service.execute(id, customerId)).isSameAs(notification);
         verify(repository,never()).save(any());
     }
     @Test void missingAndWrongTypeHaveSameNotFoundContractWithoutWrites() {
@@ -21,7 +22,7 @@ class FindServiceOrderNotificationByIdServiceTest {
         var before=wrong.getUpdatedAt();
         when(repository.findById(id)).thenReturn(Optional.empty(),Optional.of(wrong));
         for(int i=0;i<2;i++) {
-            assertThatThrownBy(()->service.execute(id)).isInstanceOf(NotificationNotFoundException.class)
+            assertThatThrownBy(()->service.execute(id, customerId)).isInstanceOf(NotificationNotFoundException.class)
                     .hasMessage("Notificação não encontrada: "+id);
         }
         assertThat(wrong.isRead()).isFalse();assertThat(wrong.getUpdatedAt()).isEqualTo(before);
