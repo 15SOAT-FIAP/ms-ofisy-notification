@@ -3,7 +3,10 @@ package br.com.ofisy.notifications.adapters.listeners.notification;
 import br.com.ofisy.notifications.adapters.listeners.dto.EventEnvelope;
 import br.com.ofisy.notifications.application.notification.createlowstock.CreateLowStockNotificationUseCase;
 import br.com.ofisy.notifications.application.notification.createquote.CreateQuoteNotificationUseCase;
+import br.com.ofisy.notifications.shared.tracing.MessageTraceContextReader;
+import br.com.ofisy.notifications.shared.tracing.TraceContextPropagator;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import tools.jackson.databind.json.JsonMapper;
 
 import java.time.Instant;
@@ -18,15 +21,18 @@ class NotificationEventListenerTest {
     private final CreateLowStockNotificationUseCase low = mock(CreateLowStockNotificationUseCase.class);
     private final CreateQuoteNotificationUseCase quote = mock(CreateQuoteNotificationUseCase.class);
     private final JsonMapper mapper = JsonMapper.builder().build();
+    private final MessageTraceContextReader traceContextReader = new MessageTraceContextReader(mapper);
+    private final TraceContextPropagator traceContextPropagator = new TraceContextPropagator();
     private final NotificationEventListener listener = new NotificationEventListener(List.of(
-            new StockLowEventHandler(low, mapper), new QuoteSentForApprovalEventHandler(quote, mapper)));
+            new StockLowEventHandler(low, mapper), new QuoteSentForApprovalEventHandler(quote, mapper)),
+            traceContextReader, traceContextPropagator);
 
     @Test
     void rejectsDuplicateHandlersAtStartup() {
         var first = new StockLowEventHandler(low, mapper);
         var second = new StockLowEventHandler(low, mapper);
 
-        assertThatThrownBy(() -> new NotificationEventListener(List.of(first, second)))
+        assertThatThrownBy(() -> new NotificationEventListener(List.of(first, second), traceContextReader, traceContextPropagator))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("StockLow");
     }
@@ -41,11 +47,11 @@ class NotificationEventListenerTest {
         var ref = UUID.randomUUID();
         var event = event("StockLow", null, Map.of("stockId", ref, "productName", "Radiador",
                 "currentQuantity", 2, "minThreshold", 10));
-        listener.handleNotificationEvent(event);
+        listener.handleNotificationEvent(event, null);
         verify(low).executeEvent(eq(event.eventId()), argThat(c -> c.stockId().equals(ref) && c.currentQuantity() == 2));
         verifyNoInteractions(quote);
         when(low.executeEvent(any(), any())).thenThrow(new IllegalStateException("unavailable"));
-        assertThatThrownBy(() -> listener.handleNotificationEvent(event)).isInstanceOf(IllegalStateException.class);
+        assertThatThrownBy(() -> listener.handleNotificationEvent(event, null)).isInstanceOf(IllegalStateException.class);
     }
 
     @Test
@@ -59,7 +65,7 @@ class NotificationEventListenerTest {
         assertThat(decoded.occurredAt()).isEqualTo(original.occurredAt());
         assertThat(decoded.serviceOrderId()).isEqualTo(order);
         assertThat(decoded.payload().has("serviceOrderId")).isFalse();
-        listener.handleNotificationEvent(decoded);
+        listener.handleNotificationEvent(decoded, null);
         verify(quote).executeEvent(eq(original.eventId()), argThat(c ->
                 c.quoteId().equals(ref) && c.serviceOrderId().equals(order) && c.totalPrice().toString().equals("123.45")));
         verifyNoInteractions(low);
@@ -70,7 +76,7 @@ class NotificationEventListenerTest {
         var order = UUID.randomUUID();
         var payload = Map.of("quoteId", UUID.randomUUID(), "totalPrice", "123.45");
         for (String type : new String[] {"QuoteCreated", "StockConsumptionFailed", "QuoteCancelled"}) {
-            listener.handleNotificationEvent(event(type, order, payload));
+            listener.handleNotificationEvent(event(type, order, payload), null);
         }
         verifyNoInteractions(low, quote);
     }
@@ -80,17 +86,17 @@ class NotificationEventListenerTest {
         var event = event("QuoteSentForApproval", UUID.randomUUID(),
                 Map.of("quoteId", UUID.randomUUID(), "totalPrice", 123.45));
         when(quote.executeEvent(any(), any())).thenThrow(new IllegalStateException("unavailable"));
-        assertThatThrownBy(() -> listener.handleNotificationEvent(event))
+        assertThatThrownBy(() -> listener.handleNotificationEvent(event, null))
                 .isInstanceOf(IllegalStateException.class).hasMessage("unavailable");
     }
 
     @Test
     void unknownTypeIsIgnoredAndInvalidKnownPayloadFails() {
-        listener.handleNotificationEvent(event("UNKNOWN", null, Map.of()));
-        listener.handleNotificationEvent(event("LOW_STOCK", null, Map.of()));
-        listener.handleNotificationEvent(event("QUOTE_GENERATED", null, Map.of()));
+        listener.handleNotificationEvent(event("UNKNOWN", null, Map.of()), null);
+        listener.handleNotificationEvent(event("LOW_STOCK", null, Map.of()), null);
+        listener.handleNotificationEvent(event("QUOTE_GENERATED", null, Map.of()), null);
         verifyNoInteractions(low, quote);
-        assertThatThrownBy(() -> listener.handleNotificationEvent(event("StockLow", null, "invalid")))
+        assertThatThrownBy(() -> listener.handleNotificationEvent(event("StockLow", null, "invalid"), null))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
@@ -100,7 +106,7 @@ class NotificationEventListenerTest {
                 Map.of("stockId", "not-a-uuid", "productName", "X", "currentQuantity", 2, "minThreshold", 10),
                 Map.of("stockId", UUID.randomUUID(), "productName", "X", "minThreshold", 10),
                 Map.of("stockId", UUID.randomUUID(), "productName", "X", "currentQuantity", "invalid", "minThreshold", 10)}) {
-            assertThatThrownBy(() -> listener.handleNotificationEvent(event("StockLow", null, payload)))
+            assertThatThrownBy(() -> listener.handleNotificationEvent(event("StockLow", null, payload), null))
                     .isInstanceOf(RuntimeException.class);
         }
         verifyNoInteractions(low, quote);
@@ -110,7 +116,7 @@ class NotificationEventListenerTest {
     void missingEnvelopeServiceOrderIsRejectedBeforeCreatingQuote() {
         var event = event("QuoteSentForApproval", null,
                 Map.of("quoteId", UUID.randomUUID(), "totalPrice", "123.45"));
-        assertThatThrownBy(() -> listener.handleNotificationEvent(event))
+        assertThatThrownBy(() -> listener.handleNotificationEvent(event, null))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("serviceOrderId is required for QuoteSentForApproval");
         verifyNoInteractions(low, quote);
@@ -123,7 +129,7 @@ class NotificationEventListenerTest {
                 Map.of("totalPrice", "123.45"),
                 Map.of("quoteId", UUID.randomUUID()),
                 Map.of("quoteId", UUID.randomUUID(), "totalPrice", "invalid")}) {
-            assertThatThrownBy(() -> listener.handleNotificationEvent(event("QuoteSentForApproval", UUID.randomUUID(), payload)))
+            assertThatThrownBy(() -> listener.handleNotificationEvent(event("QuoteSentForApproval", UUID.randomUUID(), payload), null))
                     .isInstanceOf(RuntimeException.class);
         }
         verifyNoInteractions(low, quote);
@@ -134,11 +140,11 @@ class NotificationEventListenerTest {
         var generic = event("ExecutionStarted", UUID.randomUUID(), Map.of());
         var decoded = mapper.readValue(mapper.writeValueAsString(generic), EventEnvelope.class);
         assertThat(decoded.payload().isObject()).isTrue();
-        listener.handleNotificationEvent(decoded);
+        listener.handleNotificationEvent(decoded, null);
         for (String type : new String[] {"StockLow", "QuoteSentForApproval"}) {
-            assertThatThrownBy(() -> listener.handleNotificationEvent(event(type, UUID.randomUUID(), Map.of())))
+            assertThatThrownBy(() -> listener.handleNotificationEvent(event(type, UUID.randomUUID(), Map.of()), null))
                     .isInstanceOf(RuntimeException.class);
-            assertThatThrownBy(() -> listener.handleNotificationEvent(event(type, UUID.randomUUID(), null)))
+            assertThatThrownBy(() -> listener.handleNotificationEvent(event(type, UUID.randomUUID(), null), null))
                     .isInstanceOf(RuntimeException.class);
         }
         verifyNoInteractions(low, quote);
@@ -153,5 +159,50 @@ class NotificationEventListenerTest {
         assertThatThrownBy(() -> mapper.readValue(valid.replace("2026-10-21T10:00:00Z", "invalid"), EventEnvelope.class))
                 .isInstanceOf(RuntimeException.class);
         assertThatThrownBy(() -> mapper.readValue("{}", EventEnvelope.class)).isInstanceOf(RuntimeException.class);
+    }
+
+    @Test
+    void handlesTheEventInsideTheTraceContextOfTheMessage() {
+        var reader = mock(MessageTraceContextReader.class);
+        var propagator = mock(TraceContextPropagator.class);
+        doAnswer(invocation -> {
+            invocation.getArgument(3, Runnable.class).run();
+            return null;
+        }).when(propagator).runAsConsumer(any(), any(), any(), any());
+        var tracedListener = new NotificationEventListener(List.of(new StockLowEventHandler(low, mapper)), reader, propagator);
+        var ref = UUID.randomUUID();
+        var order = UUID.randomUUID();
+        var event = event("StockLow", order, Map.of("stockId", ref, "productName", "Radiador",
+                "currentQuantity", 2, "minThreshold", 10));
+        Object attribute = "{\"traceparent\":\"00-6af79dd30000000039a72b7697c5509c-63cc4ef521ebfd0c-01\"}";
+        Map<String, String> traceContext = Map.of("traceparent", "00-6af79dd30000000039a72b7697c5509c-63cc4ef521ebfd0c-01");
+        when(reader.read(attribute)).thenReturn(traceContext);
+
+        tracedListener.handleNotificationEvent(event, attribute);
+
+        ArgumentCaptor<Map<String, String>> attributes = spanAttributesCaptor();
+        verify(propagator).runAsConsumer(eq(traceContext), eq("event.consume"), attributes.capture(), any());
+        assertThat(attributes.getValue())
+                .containsEntry("ofisy.event.id", event.eventId().toString())
+                .containsEntry("ofisy.event.type", "StockLow")
+                .containsEntry("ofisy.service_order.id", order.toString());
+        verify(low).executeEvent(eq(event.eventId()), argThat(c -> c.stockId().equals(ref)));
+    }
+
+    @Test
+    void doesNotTagTheServiceOrderOnTheSpanOfAnEventWithoutServiceOrder() {
+        var propagator = mock(TraceContextPropagator.class);
+        var tracedListener = new NotificationEventListener(List.of(), traceContextReader, propagator);
+
+        tracedListener.handleNotificationEvent(event("StockLow", null, Map.of()), null);
+
+        ArgumentCaptor<Map<String, String>> attributes = spanAttributesCaptor();
+        verify(propagator).runAsConsumer(eq(Map.of()), eq("event.consume"), attributes.capture(), any());
+        assertThat(attributes.getValue()).doesNotContainKey("ofisy.service_order.id");
+    }
+
+    @SuppressWarnings("unchecked")
+    private static ArgumentCaptor<Map<String, String>> spanAttributesCaptor() {
+        return ArgumentCaptor.forClass(Map.class);
     }
 }

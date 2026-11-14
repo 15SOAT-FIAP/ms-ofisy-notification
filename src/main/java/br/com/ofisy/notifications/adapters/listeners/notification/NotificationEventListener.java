@@ -1,11 +1,15 @@
 package br.com.ofisy.notifications.adapters.listeners.notification;
 
 import br.com.ofisy.notifications.adapters.listeners.dto.EventEnvelope;
+import br.com.ofisy.notifications.shared.tracing.MessageTraceContextReader;
+import br.com.ofisy.notifications.shared.tracing.TraceContextPropagator;
 import io.awspring.cloud.sqs.annotation.SqsListener;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.stereotype.Component;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
@@ -15,15 +19,29 @@ import java.util.stream.Collectors;
 @Component
 public class NotificationEventListener {
     private static final Logger LOGGER = LoggerFactory.getLogger(NotificationEventListener.class);
+    private static final String CONSUME_SPAN_NAME = "event.consume";
     private final Map<String, NotificationEventHandler> handlers;
+    private final MessageTraceContextReader traceContextReader;
+    private final TraceContextPropagator traceContextPropagator;
 
-    NotificationEventListener(List<NotificationEventHandler> handlers) {
+    NotificationEventListener(List<NotificationEventHandler> handlers, MessageTraceContextReader traceContextReader,
+                              TraceContextPropagator traceContextPropagator) {
         this.handlers = handlers.stream().collect(Collectors.toUnmodifiableMap(
                 NotificationEventHandler::eventType, Function.identity()));
+        this.traceContextReader = traceContextReader;
+        this.traceContextPropagator = traceContextPropagator;
     }
 
+    /** Continues the publisher's trace so the service order flow stays in one trace across the microservices. */
     @SqsListener("${app.aws.sqs.notification-queue:ofisy-notification.fifo}")
-    public void handleNotificationEvent(EventEnvelope event) {
+    public void handleNotificationEvent(EventEnvelope event,
+                                        @Header(name = MessageTraceContextReader.TRACE_CONTEXT_ATTRIBUTE, required = false)
+                                        Object traceContext) {
+        traceContextPropagator.runAsConsumer(traceContextReader.read(traceContext), CONSUME_SPAN_NAME,
+                spanAttributes(event), () -> handle(event));
+    }
+
+    private void handle(EventEnvelope event) {
         try {
             dispatch(event);
         } catch (RuntimeException failure) {
@@ -47,5 +65,15 @@ public class NotificationEventListener {
         LOGGER.info("eventId={} type={} serviceOrderId={} referenceId={} outcome={}",
                 event.eventId(), event.type(), event.serviceOrderId(), result.referenceId(),
                 result.created() ? "created" : "duplicate");
+    }
+
+    private Map<String, String> spanAttributes(EventEnvelope event) {
+        Map<String, String> attributes = new HashMap<>();
+        attributes.put("ofisy.event.id", String.valueOf(event.eventId()));
+        attributes.put("ofisy.event.type", String.valueOf(event.type()));
+        if (event.serviceOrderId() != null) {
+            attributes.put("ofisy.service_order.id", event.serviceOrderId().toString());
+        }
+        return attributes;
     }
 }

@@ -9,7 +9,7 @@ O serviço segue as convenções de Clean Architecture e DDD documentadas no
 - `adapters/controllers/notification`: controller implementa `NotificationApi`; DTOs ficam no subpacote `dto`.
 - `adapters/presenters/notification`: converte o domínio em respostas da API.
 - `adapters/listeners/notification`: recebe eventos SQS e chama a interface do caso de uso de criação.
-- `config` e `shared`: integração com Spring/AWS e segurança transversal.
+- `config` e `shared`: integração com Spring/AWS, segurança e rastreamento transversais.
 
 Os adapters são acrescentados nos PRs seguintes da stack. O domínio não conhece transporte HTTP, SQS ou DynamoDB.
 As interfaces de aplicação não dependem de adapters; os services podem usar `@Service`, como no projeto de referência.
@@ -42,3 +42,11 @@ As regras para os tipos válidos, referências, leitura e datas são preservadas
 ## Entrada de orçamento por evento
 
 O consumidor de orçamento recebe QuoteSentForApproval, após a etapa de estoque prevista na coreografia de Billing. QuoteCreated não cria o aviso de aprovação em Notification. A mensagem de disponibilidade para aprovação é composta por NotificationMessage.forQuoteSentForApproval, chamada por executeEvent. A entrada execute(command) de orçamento e sua fábrica de mensagem de orçamento gerado foram removidas por decisão explícita de descomissionamento. O nome externo do evento não muda o enum interno/persistido QUOTE_GENERATED, o schema DynamoDB ou os contratos HTTP.
+
+## Rastreamento distribuído
+
+O `dd-java-agent` não continua no `@SqsListener` o trace que chega na mensagem, porque a mensagem é recebida em uma thread e processada em outra. Sem tratamento, cada notificação apareceria no Datadog como um trace solto, separado do fluxo da OS que a originou.
+
+Por isso, o `NotificationEventListener` lê o atributo `_datadog` da mensagem com o `MessageTraceContextReader` (`shared/tracing`) e processa o evento dentro do span `event.consume`, criado pelo `TraceContextPropagator` como filho do trace de quem publicou. O span leva os atributos `ofisy.event.id`, `ofisy.event.type` e, quando o evento é de uma OS, `ofisy.service_order.id`. A gravação no DynamoDB e a consulta ao core feitas pelo handler ficam dentro desse mesmo trace.
+
+O atributo `_datadog` é publicado como `Binary` e chega ao listener como `SdkBytes`; um atributo ausente ou ilegível não impede o consumo, o evento só é processado em um trace novo. O contexto viaja nos atributos da mensagem, não no envelope, então o contrato dos eventos não muda. A API do OpenTelemetry é conectada aos spans do Datadog por `DD_TRACE_OTEL_ENABLED=true` (definido em `k8s/configmap.yml`); sem o agent, como em ambiente local e nos testes, ela é no-op. O core, o `ms-ofisy-billing`, o `ms-ofisy-execution` e o `ms-ofisy-stock` fazem o mesmo nos seus listeners.
