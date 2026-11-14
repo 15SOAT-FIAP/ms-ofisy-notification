@@ -4,6 +4,7 @@ metadata:
   name: ms-ofisy-notification-config
 data:
   APP_JWT_ISSUER: "techchallenge-ofisy-api"
+  APP_CORE_BASE_URL: "<CORE_BASE_URL>"
   JAVA_TOOL_OPTIONS: "-javaagent:/app/dd-java-agent.jar -XX:MaxRAMPercentage=75"
   DD_SERVICE: "ms-ofisy-notification"
   DD_ENV: "production"
