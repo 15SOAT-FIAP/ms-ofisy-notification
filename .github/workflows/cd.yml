@@ -18,6 +18,7 @@ env:
   EKS_CLUSTER: ms-ofisy-notification-cluster
   ECR_REPOSITORY: ms-ofisy-notification-ecr
   DYNAMODB_TABLE: Notifications
+  CORE_SERVICE_NAME: default/ofisy-service
 
 jobs:
   deploy-to-aws:
@@ -51,6 +52,31 @@ jobs:
             exit 1
           fi
           echo "Tabela $DYNAMODB_TABLE disponível."
+
+      - name: Obter URL do Core (NLB interno)
+        run: |
+          NLB_ARNS=$(aws elbv2 describe-load-balancers --query "LoadBalancers[?Type=='network'].LoadBalancerArn" --output text)
+
+          find_nlb_url() {
+            local service_name="$1"
+            local arn dns
+            for arn in $NLB_ARNS; do
+              if [ "$(aws elbv2 describe-tags --resource-arns "$arn" --query "TagDescriptions[0].Tags[?Key=='kubernetes.io/service-name'].Value | [0]" --output text)" == "$service_name" ]; then
+                dns=$(aws elbv2 describe-load-balancers --load-balancer-arns "$arn" --query "LoadBalancers[0].DNSName" --output text)
+                echo "http://$dns:8080"
+                return 0
+              fi
+            done
+            return 1
+          }
+
+          if ! CORE_URL=$(find_nlb_url "$CORE_SERVICE_NAME"); then
+            echo "::error::NLB do Service $CORE_SERVICE_NAME não encontrado. Faça o deploy do core antes do notification."
+            exit 1
+          fi
+
+          echo "CORE_URL=$CORE_URL" >> "$GITHUB_ENV"
+          echo "Core: $CORE_URL"
 
       - name: Conectar ao EKS Cluster
         run: |
@@ -94,13 +120,17 @@ jobs:
         env:
           JWT_SEC: ${{ secrets.JWT_SECRET }}
           DD_KEY: ${{ secrets.DD_API_KEY }}
+          CORE_TOKEN: ${{ secrets.CORE_SERVICE_TOKEN }}
         run: |
           BASE64_JWT=$(echo -n "$JWT_SEC" | base64 -w 0)
           BASE64_DD_KEY=$(echo -n "$DD_KEY" | base64 -w 0)
+          BASE64_CORE_TOKEN=$(echo -n "$CORE_TOKEN" | base64 -w 0)
 
           sed -i "s|<BASE64_JWT_SECRET>|$BASE64_JWT|g" k8s/secret.yml
           sed -i "s|<BASE64_DD_API_KEY>|$BASE64_DD_KEY|g" k8s/secret.yml
+          sed -i "s|<BASE64_CORE_SERVICE_TOKEN>|$BASE64_CORE_TOKEN|g" k8s/secret.yml
 
+          sed -i "s|<CORE_BASE_URL>|$CORE_URL|g" k8s/configmap.yml
           sed -i "s|<IMAGE_TAG>|$IMAGE_TAG|g" k8s/configmap.yml
 
           CONFIG_HASH=$(cat k8s/configmap.yml k8s/secret.yml | sha256sum | cut -d' ' -f1)
