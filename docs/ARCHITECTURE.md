@@ -16,15 +16,16 @@ As interfaces de aplicação não dependem de adapters; os services podem usar `
 
 ## Adaptações do microsserviço
 
-Consultas e marcação de leitura usam os casos de uso específicos de estoque e ordem de serviço do core.
+Consultas e marcação de leitura têm casos de uso separados para estoque e para ordem de serviço, como no monolito de onde o serviço foi extraído.
 ID ausente e ID de outro tipo geram a mesma `NotificationNotFoundException`, sem alterar leitura ou datas.
 As rotas por id são `/stock/{id}` e `/service-orders/{id}`, com os respectivos PATCHs `/read`.
 Tipo, referências e mensagem são definidos pelas fábricas e value objects do domínio, orquestrados pelos casos de criação.
 O listener traduz o envelope SQS para commands e não constrói entidades nem escolhe `NotificationType`.
 
-A criação de estoque preserva `execute(command)` do core. Para orçamento, essa entrada legada foi descomissionada: a interface oferece somente `executeEvent(eventId, command)`. A criação por evento usa o identificador do evento para a inserção condicional; uma duplicata não atualiza um registro existente.
+A criação de estoque preserva o `execute(command)` herdado do monolito. Para orçamento, essa entrada legada foi descomissionada: a interface oferece somente `executeEvent(eventId, command)`. A criação por evento usa o identificador do evento para a inserção condicional; uma duplicata não atualiza um registro existente.
 Mantemos a adaptação de listagens por cursor para DynamoDB, com `items` e `nextToken`, em vez de listas sem paginação.
-A resposta expõe `stockId` e `quoteId` conforme o contrato do core. O `referenceId` é usado internamente e na persistência.
+A resposta expõe `stockId` e `quoteId`, mantendo o contrato da API do monolito. O `referenceId` é usado internamente e na persistência.
+Para associar a notificação de orçamento ao cliente dono da OS, o serviço consulta o core de forma síncrona (`GET /api/v1/service-orders/{id}/customer`), leitura permitida pelo [ADR-0015](https://github.com/15SOAT-FIAP/techchallenge-ofisy/blob/master/docs/adr/0015-ajustar-a-saga-da-os-ao-fluxo-implementado.md).
 DynamoDB substitui JPA conforme ADR-0013; portanto não copiamos entidades JPA, Flyway ou transações relacionais.
 A criação por evento usa operação condicional; atualização de leitura é uma operação distinta.
 
