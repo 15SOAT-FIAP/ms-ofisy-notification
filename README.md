@@ -123,6 +123,8 @@ Propriedades principais (em `application.yml`):
 
 Base: `/api/v1/notifications`. A documentação interativa fica no Swagger UI (`/swagger-ui.html`) e no contrato OpenAPI (`/v3/api-docs`).
 
+Em produção, a spec deste serviço também aparece no Swagger do core, que reúne as APIs de todos os serviços: no Swagger UI do core, escolha `notification` no seletor de definições. O API Gateway expõe o `/v3/api-docs` deste serviço em `/docs/notification`. Para o *Try it out* funcionar por lá, o `SwaggerConfig` declara o servidor do OpenAPI com URL relativa (`/`): as chamadas vão para a raiz do Gateway, com o mesmo roteamento e o mesmo authorizer das chamadas normais.
+
 | Método | Caminho | Descrição | Autenticação |
 |---|---|---|---|
 | GET | `/stock` | Lista notificações de estoque | JWT de funcionário (ADMIN ou STOCKMAN) |
