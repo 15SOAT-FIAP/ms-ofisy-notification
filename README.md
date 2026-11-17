@@ -1,75 +1,211 @@
-# techchallenge-ofisy-notifications
+# ms-ofisy-notification
 
-## DynamoDB
+Microsserviço de notificações do Ofisy. Consome eventos de estoque e de orçamento/pagamento publicados via SNS/SQS, grava as notificações no DynamoDB e expõe uma API REST paginada para funcionários e clientes.
 
-Fora dos perfis `local` e `dev`, o cliente usa o endpoint AWS da região configurada em
-`SPRING_CLOUD_AWS_REGION_STATIC` (padrão `us-east-1`) e a cadeia padrão de credenciais
-do AWS SDK, incluindo IAM roles. Não há credenciais de teste nesse modo.
+## Sobre o serviço
 
-Para LocalStack, ative `SPRING_PROFILES_ACTIVE=local`. Esse perfil usa credenciais
-fictícias `test/test` e `http://localhost:4566`. Em containers, configure
-`SPRING_CLOUD_AWS_DYNAMODB_ENDPOINT` com o endereço do LocalStack acessível pelo container.
-Tabela e índices devem ser provisionados antes do uso.
+- Recebe eventos de `StockLow` (estoque baixo) e de cobrança (`QuoteSentForApproval`, `PaymentCheckoutCreated`, `PaymentConfirmed`, `PaymentFailed`) pela fila `ofisy-notification.fifo`.
+- Cria cada notificação de forma idempotente: um mesmo `eventId` nunca gera duas notificações, e uma redelivery não altera o estado de leitura.
+- Expõe consultas paginadas por cursor e marcação de leitura, separadas entre estoque e ordens de serviço.
+- Autentica funcionários com JWT emitido pelo core. As rotas de notificação de ordem de serviço do cliente são protegidas pelo API Gateway e seu Lambda Authorizer.
 
-## Deduplicação de eventos
+O contexto geral do sistema está em [techchallenge-ofisy](https://github.com/15SOAT-FIAP/techchallenge-ofisy). As decisões deste serviço estão em [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
-O consumidor usa inserção condicional (`attribute_not_exists(id)`) para que somente
-uma entrega de cada `eventId` crie a notificação. Redelivery não altera uma notificação
-existente, incluindo seu estado de leitura. Falhas de infraestrutura continuam sendo
-propagadas para retry; somente conflito de chave é tratado como evento já processado.
+## Stack
 
-Para executar o teste concorrente contra DynamoDB Local, defina
-`DYNAMODB_TEST_ENDPOINT=http://localhost:8000` e execute `mvn clean verify`.
-O teste cria e remove uma tabela temporária exclusiva; sem essa variável ele é pulado.
+- Java 21 e Spring Boot 4.0.5 (Maven)
+- Spring Cloud AWS 4.2.0 (SQS)
+- AWS SDK v2 (DynamoDB Enhanced Client)
+- Spring Security com JWT (jjwt)
+- springdoc-openapi (Swagger UI)
+- Spring Actuator e agente Datadog na imagem
+- Testes: JUnit, Testcontainers (LocalStack), Awaitility, Maven Failsafe, JaCoCo
 
-## JWT
+## Estrutura do projeto
 
-Defina `JWT_SECRET` externamente com a mesma chave HMAC usada pelo emissor de funcionário,
-com pelo menos 32 bytes (e tamanho compatível com o algoritmo de assinatura).
-Fora do perfil `dev`, a aplicação não possui chave padrão e falha na inicialização se a chave estiver
-ausente, vazia ou for curta demais. Nunca versione o valor real.
+O código segue Clean Architecture, com um pacote por caso de uso:
 
-Defina `APP_JWT_ISSUER` com o issuer exato do token de funcionário emitido pelo core
-(padrão `techchallenge-ofisy-api`). O filtro valida assinatura, emissor, expiração,
-subject e a claim `role` singular antes de converter o perfil em uma autoridade Spring.
+```
+src/main/java/br/com/ofisy/notifications
+├── domain/notification          # entidade, value objects, porta do repositório (sem Spring nem SDK AWS)
+├── application/notification     # um UseCase e um Service por operação
+├── adapters/
+│   ├── controllers/notification # API REST (implementa NotificationApi)
+│   ├── gateways/notification    # persistência DynamoDB e mapeamento
+│   ├── listeners/notification   # consumidores SQS e handlers por tipo de evento
+│   └── presenters/notification  # conversão para as respostas da API
+├── config                       # DynamoDB, segurança, Swagger e tratamento de erros
+└── shared                       # filtro JWT e rastreamento distribuído
+```
 
-Nas quatro rotas de ordem de serviço, o Gateway sobrescreve `X-Customer-Id` com a
-identidade autenticada pelo Lambda Authorizer. O Notification recebe esse header
-obrigatório e aplica a autorização por titularidade. No deploy, restrinja o acesso
-às quatro rotas ao Gateway para que somente ele possa fornecer essa identidade.
-As listagens e os cursores ficam restritos ao cliente. Consulta por ID e marcação de
-leitura retornam `404` quando a notificação pertence a outra pessoa. As rotas de estoque
-exigem JWT de funcionário com perfil ADMIN ou STOCKMAN.
+Outros diretórios relevantes:
 
-Ao consumir `QuoteSentForApproval`, o serviço resolve o cliente da OS pelo Core.
-Configure `APP_CORE_BASE_URL` e `APP_CORE_SERVICE_TOKEN` para usar a rota autenticada
-`GET /api/v1/service-orders/{id}/customer`. Os registros sem titular associado ficam
-fora das rotas de cliente.
+- `dev/integration/`: ambiente local com LocalStack, Docker Compose e cenários de mensageria.
+- `k8s/`: manifestos de deploy no EKS (deployment, service, HPA, configmap e secret).
+- `docs/`: arquitetura do serviço.
+- `.github/workflows/`: CI, deploy (`cd.yml`) e remoção do ambiente (`destroy-app.yml`).
 
-## Eventos consumidos e ambiente local
+## Pré-requisitos
 
-O Billing também publica `PaymentCheckoutCreated`, `PaymentConfirmed` e
-`PaymentFailed`. O Notification grava cada aviso para o dono da ordem de serviço e
-o disponibiliza pelas mesmas rotas autenticadas de notificações da OS. O checkout
-expõe `paymentId` e `checkoutUrl`. A confirmação, a recusa e a expiração expõem
-`paymentId` e uma mensagem de situação. Os campos de pagamento são omitidos nas
-respostas de estoque e orçamento.
+- JDK 21 e Maven (ou o wrapper `./mvnw`)
+- Docker e Docker Compose, para o ambiente local e os testes de integração
+- Make (opcional, mas recomendado para os comandos abaixo)
 
-O webhook do Mercado Pago é recebido pelo Billing. O Notification recebe somente
-os eventos publicados no SNS/SQS, com deduplicação por `eventId`.
+## Como executar
 
-- StockLow: aviso de estoque baixo.
-- QuoteSentForApproval: orçamento disponível para aprovação após a etapa de estoque; serviceOrderId no envelope, quoteId/totalPrice no payload.
+### Ambiente local completo (recomendado)
 
-QuoteCreated não cria notificação de orçamento. A criação de orçamento ocorre pela entrada idempotente de evento; execute(command) de orçamento e a mensagem legada de orçamento gerado foram descomissionados. O tipo interno QUOTE_GENERATED permanece igual. Para subir LocalStack, publicar cenários e executar a integração, consulte [dev/integration/README.md](dev/integration/README.md). O filtro da assinatura SNS na AWS deve ser alinhado na infraestrutura responsável; o bootstrap local não altera a conta AWS.
+Sobe o LocalStack, cria os recursos AWS (tabela, filas e assinaturas) e a aplicação com o perfil `dev`:
 
-O teste [NotificationEventListenerIT](src/test/java/br/com/ofisy/notifications/adapters/listeners/notification/NotificationEventListenerIT.java) sobe SNS/SQS/DynamoDB automaticamente com Testcontainers, publica mensagens e verifica os efeitos do listener real. Ele roda em `mvn verify` pelo Failsafe e exige Docker, sem depender de uma fila AWS ou do ambiente Compose já aberto. A documentação de integração explica os cenários e como executar a suíte inteira sem skips.
+```bash
+make dev-up
+```
 
-## OpenAPI
+Sem Make:
 
-Com o ambiente local iniciado, acesse o Swagger UI em
-`http://localhost:18081/swagger-ui.html` e a especificação em
-`http://localhost:18081/v3/api-docs`. No Swagger UI, use **Authorize** para
-informar um JWT de funcionário com perfil ADMIN ou STOCKMAN e testar as rotas
-de estoque. Para ordens de serviço, faça a chamada pela integração do Gateway
-com um JWT de cliente. O Gateway injeta o header de identidade.
+```bash
+docker compose -f dev/integration/compose.yml up -d --build app
+```
+
+A API fica disponível em `http://localhost:18081/api/v1/notifications`. Para encerrar:
+
+```bash
+make dev-down
+```
+
+Não há volume persistente: o ambiente é descartável.
+
+### Execução pela IDE ou linha de comando
+
+Com o LocalStack já em execução (`docker compose -f dev/integration/compose.yml up -d localstack`), ative o perfil `dev`:
+
+```bash
+SPRING_PROFILES_ACTIVE=dev JWT_SECRET=<segredo-de-no-minimo-32-bytes> ./mvnw spring-boot:run
+```
+
+O perfil `dev` usa as credenciais fictícias `test/test` e o endpoint `http://localhost:14566`. Ele não deve ser usado em ambientes compartilhados.
+
+### Cenários de mensageria
+
+```bash
+make dev-stock            # publica StockLow
+make dev-quote            # publica QuoteSentForApproval (exige SERVICE_ORDER_ID=<UUID>)
+make dev-quote-created    # QuoteCreated, que não deve criar notificação
+make dev-stock-failure    # evento que não deve criar aviso de orçamento
+make dev-invalid          # payload inválido, que vai para a DLQ
+make dev-status           # estado das filas
+make dev-replay           # reenvia a mensagem da DLQ após o reparo
+```
+
+O detalhamento de cada cenário está em [`dev/integration/README.md`](dev/integration/README.md).
+
+## Configuração
+
+Variáveis de ambiente:
+
+| Variável | Obrigatória | Padrão | Descrição |
+|---|---|---|---|
+| `JWT_SECRET` | sim, fora do perfil `dev` | — | Chave HMAC compartilhada com o emissor de tokens de funcionário. Mínimo de 32 bytes. Sem chave padrão fora do `dev`: a aplicação não sobe se a chave estiver ausente ou curta. |
+| `APP_JWT_ISSUER` | não | `techchallenge-ofisy-api` | Issuer esperado nos tokens de funcionário. |
+| `SPRING_CLOUD_AWS_REGION_STATIC` | não | `us-east-1` | Região AWS. |
+| `SPRING_CLOUD_AWS_DYNAMODB_ENDPOINT` | não | endpoint AWS | Use para apontar para o LocalStack em containers. |
+| `APP_CORE_BASE_URL` | sim, para avisos de orçamento e de pagamento | `http://localhost:8080` | URL do core, usada para consultar o titular da ordem de serviço. Em produção vem do `k8s/configmap.yml`; no Compose, aponte para um core acessível ao container. |
+| `APP_CORE_SERVICE_TOKEN` | sim, para avisos de orçamento e de pagamento | — | Token de serviço usado nessa consulta. Em produção vem do `k8s/secret.yml`, preenchido pelo `cd.yml` com o secret `CORE_SERVICE_TOKEN`. |
+
+Em produção, as credenciais AWS vêm da cadeia padrão do SDK (IAM roles). Não há credenciais de teste fora do perfil `dev`. O valor real de `JWT_SECRET` nunca deve ser versionado.
+
+Propriedades principais (em `application.yml`):
+
+- `app.aws.sqs.notification-queue`: fila de consumo (`ofisy-notification.fifo`).
+- `app.aws.dynamodb.table-name`: tabela de notificações (`Notifications`).
+
+## API
+
+Base: `/api/v1/notifications`. A documentação interativa fica no Swagger UI (`/swagger-ui.html`) e no contrato OpenAPI (`/v3/api-docs`).
+
+| Método | Caminho | Descrição | Autenticação |
+|---|---|---|---|
+| GET | `/stock` | Lista notificações de estoque | JWT de funcionário (ADMIN ou STOCKMAN) |
+| GET | `/stock/unread` | Lista notificações de estoque não lidas | JWT de funcionário (ADMIN ou STOCKMAN) |
+| GET | `/stock/{id}` | Consulta uma notificação de estoque | JWT de funcionário (ADMIN ou STOCKMAN) |
+| PATCH | `/stock/{id}/read` | Marca uma notificação de estoque como lida | JWT de funcionário (ADMIN ou STOCKMAN) |
+| GET | `/service-orders` | Lista notificações de ordens de serviço | JWT de cliente validado pelo API Gateway (header `X-Customer-Id`) |
+| GET | `/service-orders/unread` | Lista notificações de ordens de serviço não lidas | JWT de cliente validado pelo API Gateway (header `X-Customer-Id`) |
+| GET | `/service-orders/{id}` | Consulta uma notificação de ordem de serviço | JWT de cliente validado pelo API Gateway (header `X-Customer-Id`) |
+| PATCH | `/service-orders/{id}/read` | Marca uma notificação de ordem de serviço como lida | JWT de cliente validado pelo API Gateway (header `X-Customer-Id`) |
+
+Regras das listagens:
+
+- `limit` tem padrão 50 e aceita valores de 1 a 100. Valor inválido retorna HTTP 400 em formato `ProblemDetail`.
+- `nextToken` é opaco e específico da consulta. Token antigo, malformado ou de outra consulta retorna 400.
+- Páginas vazias podem ter `nextToken` em consultas filtradas. Percorra até o `nextToken` vir `null`.
+
+Rotas de ordem de serviço: são `permitAll` no `SecurityConfig` e exigem o header `X-Customer-Id` em todos os métodos, enviado pelo API Gateway depois de validar o JWT de cliente. O serviço não valida esse token localmente, e um JWT de funcionário não serve para essas rotas.
+
+## Eventos consumidos
+
+Os eventos chegam por tópicos SNS FIFO com filtro por `type` no corpo. A assinatura é feita pelo repositório de infraestrutura.
+
+| Tópico SNS FIFO | Evento | Efeito |
+|---|---|---|
+| `ofisy-stock-events.fifo` | `StockLow` | Cria aviso de estoque baixo (`LOW_STOCK`). |
+| `ofisy-billing-events.fifo` | `QuoteSentForApproval` | Cria aviso de orçamento disponível para aprovação (`QUOTE_GENERATED`). |
+| `ofisy-billing-events.fifo` | `PaymentCheckoutCreated` | Cria aviso de checkout de pagamento criado. |
+| `ofisy-billing-events.fifo` | `PaymentConfirmed` | Cria aviso de pagamento confirmado. |
+| `ofisy-billing-events.fifo` | `PaymentFailed` | Cria aviso de falha no pagamento. |
+
+Regras de entrega:
+
+- Cada `eventId` é processado uma única vez (inserção condicional no DynamoDB).
+- Falhas de infraestrutura são propagadas para retry. Só conflito de chave é tratado como evento já processado.
+- Mensagens inválidas vão para a DLQ `ofisy-notification-dlq.fifo`.
+- `QuoteCreated` não gera notificação. A notificação de orçamento nasce somente de `QuoteSentForApproval`.
+
+Os contratos completos estão em [`dev/integration/README.md`](dev/integration/README.md).
+
+## Testes
+
+```bash
+# testes unitários
+./mvnw test
+
+# testes unitários e de integração (exige Docker para o Testcontainers)
+./mvnw clean verify
+
+# teste concorrente de deduplicação contra DynamoDB Local
+DYNAMODB_TEST_ENDPOINT=http://localhost:8000 ./mvnw clean verify
+
+# somente o consumidor SQS, com LocalStack via Testcontainers
+./mvnw test-compile failsafe:integration-test failsafe:verify -Dit.test=NotificationEventListenerIT
+
+# suíte completa no ambiente local, com verificação dos relatórios
+make dev-test
+```
+
+Sem `DYNAMODB_TEST_ENDPOINT`, o teste de concorrência é pulado. `mvn verify` executa o consumidor pelo Failsafe e exige Docker: a classe não é pulada em silêncio.
+
+## Segurança
+
+- O segredo JWT e as credenciais AWS reais nunca são versionados.
+- O perfil `dev` e seus valores fictícios valem somente para LocalStack.
+- A rota de cliente deve ser exposta apenas pela fronteira autenticada do API Gateway. A aplicação não deve oferecer uma entrada pública alternativa.
+- Os caminhos de estoque continuam exigindo JWT de funcionário com perfil ADMIN ou STOCKMAN.
+
+## Deploy
+
+- `.github/workflows/cd.yml`: deploy no EKS, com manifestos em `k8s/`.
+- `.github/workflows/destroy-app.yml`: remoção do ambiente.
+- Recursos AWS (tabela, filas, tópicos, assinaturas e IAM) são provisionados pelo repositório de infraestrutura, não por este serviço.
+
+## Documentação adicional
+
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md): arquitetura e adaptações do microsserviço.
+- [`dev/integration/README.md`](dev/integration/README.md): ambiente local, cenários de mensageria e contratos de eventos.
+- [techchallenge-ofisy](https://github.com/15SOAT-FIAP/techchallenge-ofisy): core, com os ADRs e RFCs do sistema.
+
+## Repositórios relacionados
+
+- [techchallenge-ofisy](https://github.com/15SOAT-FIAP/techchallenge-ofisy): core (pedidos, estoque e faturamento).
+- [techchallenge-ofisy-auth](https://github.com/15SOAT-FIAP/techchallenge-ofisy-auth): autenticação de clientes e Lambda Authorizer.
+- [techchallenge-ofisy-eks-infra](https://github.com/15SOAT-FIAP/techchallenge-ofisy-eks-infra): infraestrutura EKS, API Gateway e observabilidade.
+- [techchallenge-ofisy-rds-infra](https://github.com/15SOAT-FIAP/techchallenge-ofisy-rds-infra): infraestrutura do banco PostgreSQL.
