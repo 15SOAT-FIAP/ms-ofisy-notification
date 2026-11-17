@@ -109,8 +109,8 @@ Variáveis de ambiente:
 | `APP_JWT_ISSUER` | não | `techchallenge-ofisy-api` | Issuer esperado nos tokens de funcionário. |
 | `SPRING_CLOUD_AWS_REGION_STATIC` | não | `us-east-1` | Região AWS. |
 | `SPRING_CLOUD_AWS_DYNAMODB_ENDPOINT` | não | endpoint AWS | Use para apontar para o LocalStack em containers. |
-| `APP_CORE_BASE_URL` | só para avisos de orçamento no Compose | — | URL de um core acessível ao container. |
-| `APP_CORE_SERVICE_TOKEN` | só para avisos de orçamento no Compose | — | Token de serviço usado para consultar o titular da ordem de serviço no core. |
+| `APP_CORE_BASE_URL` | sim, para avisos de orçamento e de pagamento | `http://localhost:8080` | URL do core, usada para consultar o titular da ordem de serviço. Em produção vem do `k8s/configmap.yml`; no Compose, aponte para um core acessível ao container. |
+| `APP_CORE_SERVICE_TOKEN` | sim, para avisos de orçamento e de pagamento | — | Token de serviço usado nessa consulta. Em produção vem do `k8s/secret.yml`, preenchido pelo `cd.yml` com o secret `CORE_SERVICE_TOKEN`. |
 
 Em produção, as credenciais AWS vêm da cadeia padrão do SDK (IAM roles). Não há credenciais de teste fora do perfil `dev`. O valor real de `JWT_SECRET` nunca deve ser versionado.
 
@@ -129,10 +129,10 @@ Base: `/api/v1/notifications`. A documentação interativa fica no Swagger UI (`
 | GET | `/stock/unread` | Lista notificações de estoque não lidas | JWT de funcionário (ADMIN ou STOCKMAN) |
 | GET | `/stock/{id}` | Consulta uma notificação de estoque | JWT de funcionário (ADMIN ou STOCKMAN) |
 | PATCH | `/stock/{id}/read` | Marca uma notificação de estoque como lida | JWT de funcionário (ADMIN ou STOCKMAN) |
-| GET | `/service-orders` | Lista notificações de ordens de serviço | JWT de funcionário ou cliente via Gateway |
-| GET | `/service-orders/unread` | Lista notificações de ordens de serviço não lidas | JWT de funcionário ou cliente via Gateway |
-| GET | `/service-orders/{id}` | Consulta uma notificação de ordem de serviço | JWT de funcionário ou cliente via Gateway |
-| PATCH | `/service-orders/{id}/read` | Marca uma notificação de ordem de serviço como lida | JWT de funcionário ou cliente via Gateway |
+| GET | `/service-orders` | Lista notificações de ordens de serviço | JWT de cliente validado pelo API Gateway (header `X-Customer-Id`) |
+| GET | `/service-orders/unread` | Lista notificações de ordens de serviço não lidas | JWT de cliente validado pelo API Gateway (header `X-Customer-Id`) |
+| GET | `/service-orders/{id}` | Consulta uma notificação de ordem de serviço | JWT de cliente validado pelo API Gateway (header `X-Customer-Id`) |
+| PATCH | `/service-orders/{id}/read` | Marca uma notificação de ordem de serviço como lida | JWT de cliente validado pelo API Gateway (header `X-Customer-Id`) |
 
 Regras das listagens:
 
@@ -140,7 +140,7 @@ Regras das listagens:
 - `nextToken` é opaco e específico da consulta. Token antigo, malformado ou de outra consulta retorna 400.
 - Páginas vazias podem ter `nextToken` em consultas filtradas. Percorra até o `nextToken` vir `null`.
 
-Rotas de ordem de serviço para cliente: o `X-Customer-Id` é obrigatório e é enviado pelo API Gateway depois de validar o JWT de cliente. O serviço não valida esse token localmente.
+Rotas de ordem de serviço: são `permitAll` no `SecurityConfig` e exigem o header `X-Customer-Id` em todos os métodos, enviado pelo API Gateway depois de validar o JWT de cliente. O serviço não valida esse token localmente, e um JWT de funcionário não serve para essas rotas.
 
 ## Eventos consumidos
 
