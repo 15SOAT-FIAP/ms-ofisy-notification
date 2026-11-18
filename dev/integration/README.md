@@ -32,19 +32,24 @@ As quatro listagens mantêm `limit=50` como padrão e agora aceitam somente 1–
 
 Para a suíte Java no PowerShell: `$env:DYNAMODB_TEST_ENDPOINT='http://localhost:14566'; mvn clean verify`, seguido de `python dev/integration/assert_reports.py`. No Bash: `DYNAMODB_TEST_ENDPOINT=http://localhost:14566 mvn clean verify`. O workflow também provisiona LocalStack e exige a execução das integrações obrigatórias.
 
-## Limites desta entrega
+## Escopo
 
-Categorias internas, referências, estado de leitura e 404 para tipo incorreto permanecem equivalentes ao core. A entrada por evento de orçamento agora produz a mensagem de disponibilidade para aprovação no domínio. A entrada legada execute(command) de orçamento e a mensagem de orçamento gerado foram descomissionadas; a criação de orçamento exige eventId para deduplicação. O listener continua traduzindo transporte em commands. Eventos adicionais desenhados para notification precisam de matriz evento/regra/schema aprovada; esta entrega cobre StockLow e QuoteSentForApproval. Exemplos do desenho com type divergente do título não devem ser copiados literalmente. Terraform, IAM, alarmes, integração real com publicadores e a política de acesso via Gateway são dependências próprias, não comprovadas por LocalStack.
+Categorias internas, referências, estado de leitura e 404 para tipo incorreto permanecem equivalentes ao monolito de onde o serviço foi extraído. A entrada legada execute(command) de orçamento e a mensagem de orçamento gerado foram descomissionadas; a criação por evento exige eventId para deduplicação. O listener continua traduzindo transporte em commands. O serviço cobre StockLow, QuoteSentForApproval, PaymentCheckoutCreated, PaymentConfirmed e PaymentFailed. Terraform, IAM e a política de acesso via Gateway ficam no `techchallenge-ofisy-eks-infra` e não são comprovados por LocalStack.
 
-## Orçamento disponível para aprovação
+## Avisos de orçamento e de pagamento
 
-O aviso de orçamento é criado somente ao consumir `QuoteSentForApproval`, após a etapa de estoque no fluxo de Billing. `QuoteCreated` continua sendo um evento de Billing para Stock e é excluído da assinatura de Notification. Sua entrega direta ao listener também não cria notificação. O fluxo StockLow permanece igual.
+O aviso de orçamento é criado somente ao consumir `QuoteSentForApproval`, após a etapa de estoque no fluxo de Billing. `QuoteCreated` é um evento de Billing para Stock e fica fora da assinatura de Notification. Sua entrega direta ao listener também não cria notificação. Um orçamento editado volta a ser enviado para aprovação, e cada `QuoteSentForApproval` (com seu próprio eventId) gera um novo aviso com o total atualizado.
 
-O consumidor espera eventId/type/serviceOrderId/occurredAt no envelope e quoteId/totalPrice no payload. O serviceOrderId não é duplicado no payload. Esse contrato usa os dados necessários ao consumidor e ainda precisa ser conferido com o publicador real de Billing, que não estava implementado nos heads consultados de seus PRs em 01/11/2026. Os cenários locais simulam o publicador; não validam a transação real de consumo de estoque do outro serviço.
+O consumidor espera eventId/type/serviceOrderId/occurredAt no envelope. Os payloads seguem o contrato publicado pelo `ms-ofisy-billing` ([MESSAGING.md do billing](https://github.com/15SOAT-FIAP/ms-ofisy-billing/blob/master/docs/MESSAGING.md#eventos-publicados)): quoteId/totalPrice no `QuoteSentForApproval`, paymentId/checkoutUrl/amount no `PaymentCheckoutCreated`, paymentId/amount no `PaymentConfirmed` e paymentId/reason no `PaymentFailed`. O serviceOrderId não é duplicado no payload. O `checkoutUrl` é gravado junto com o aviso de checkout, para o cliente chegar ao link de pagamento.
 
-O texto esperado é “Orçamento #{quoteId} disponível para aprovação na ordem de serviço '{serviceOrderId}'. Valor total: R$ {valor com duas casas}”. O tipo persistido/API QUOTE_GENERATED é mantido.
+| Evento | Tipo persistido | Texto |
+|---|---|---|
+| `QuoteSentForApproval` | `QUOTE_GENERATED` | “Orçamento #{quoteId} disponível para aprovação na ordem de serviço '{serviceOrderId}'. Valor total: R$ {valor}” |
+| `PaymentCheckoutCreated` | `PAYMENT_CHECKOUT_CREATED` | “Pagamento disponível para a ordem de serviço '{serviceOrderId}'. Valor: R$ {valor}” |
+| `PaymentConfirmed` | `PAYMENT_CONFIRMED` | “Pagamento confirmado para a ordem de serviço '{serviceOrderId}'. Valor: R$ {valor}” |
+| `PaymentFailed` | `PAYMENT_FAILED` | “Pagamento recusado (ou expirado) para a ordem de serviço '{serviceOrderId}'.” |
 
-A assinatura AWS de Billing para Notification também precisa mudar seu filtro para QuoteSentForApproval de forma coordenada com a implantação do consumidor e o publicador. O bootstrap altera somente LocalStack. Core e Notification são consumidores independentes: o recebimento do evento não garante que o Core já tenha atualizado o status da OS. A notificação não consulta outro banco/serviço para aguardar essa atualização.
+Os avisos de orçamento e de pagamento são do cliente dono da OS, que o serviço descobre consultando o core (`GET /api/v1/service-orders/{id}/customer`). Core e Notification são consumidores independentes: o recebimento do evento não garante que o Core já tenha atualizado o status da OS, e a notificação não espera essa atualização.
 
 ## Testes automatizados do consumidor SQS
 
