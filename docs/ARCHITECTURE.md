@@ -11,7 +11,7 @@ O serviço segue as convenções de Clean Architecture e DDD documentadas no
 - `adapters/listeners/notification`: recebe eventos SQS e chama a interface do caso de uso de criação.
 - `config` e `shared`: integração com Spring/AWS, segurança e rastreamento transversais.
 
-Os adapters são acrescentados nos PRs seguintes da stack. O domínio não conhece transporte HTTP, SQS ou DynamoDB.
+O domínio não conhece transporte HTTP, SQS ou DynamoDB.
 As interfaces de aplicação não dependem de adapters; os services podem usar `@Service`, como no projeto de referência.
 
 ## Adaptações do microsserviço
@@ -25,7 +25,7 @@ O listener traduz o envelope SQS para commands e não constrói entidades nem es
 A criação de estoque preserva o `execute(command)` herdado do monolito. Para orçamento, essa entrada legada foi descomissionada: a interface oferece somente `executeEvent(eventId, command)`. A criação por evento usa o identificador do evento para a inserção condicional; uma duplicata não atualiza um registro existente.
 Mantemos a adaptação de listagens por cursor para DynamoDB, com `items` e `nextToken`, em vez de listas sem paginação.
 A resposta expõe `stockId` e `quoteId`, mantendo o contrato da API do monolito. O `referenceId` é usado internamente e na persistência.
-Para associar a notificação de orçamento ao cliente dono da OS, o serviço consulta o core de forma síncrona (`GET /api/v1/service-orders/{id}/customer`), leitura permitida pelo [ADR-0015](https://github.com/15SOAT-FIAP/techchallenge-ofisy/blob/master/docs/adr/0015-ajustar-a-saga-da-os-ao-fluxo-implementado.md).
+Para associar as notificações de orçamento e de pagamento ao cliente dono da OS, o serviço consulta o core de forma síncrona (`GET /api/v1/service-orders/{id}/customer`), leitura permitida pelo [ADR-0015](https://github.com/15SOAT-FIAP/techchallenge-ofisy/blob/master/docs/adr/0015-ajustar-a-saga-da-os-ao-fluxo-implementado.md).
 DynamoDB substitui JPA conforme ADR-0013; portanto não copiamos entidades JPA, Flyway ou transações relacionais.
 A criação por evento usa operação condicional; atualização de leitura é uma operação distinta.
 
