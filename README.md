@@ -152,9 +152,9 @@ Os eventos chegam por tópicos SNS FIFO com filtro por `type` no corpo. A assina
 |---|---|---|
 | `ofisy-stock-events.fifo` | `StockLow` | Cria aviso de estoque baixo (`LOW_STOCK`). |
 | `ofisy-billing-events.fifo` | `QuoteSentForApproval` | Cria aviso de orçamento disponível para aprovação (`QUOTE_GENERATED`). |
-| `ofisy-billing-events.fifo` | `PaymentCheckoutCreated` | Cria aviso de checkout de pagamento criado. |
-| `ofisy-billing-events.fifo` | `PaymentConfirmed` | Cria aviso de pagamento confirmado. |
-| `ofisy-billing-events.fifo` | `PaymentFailed` | Cria aviso de falha no pagamento. |
+| `ofisy-billing-events.fifo` | `PaymentCheckoutCreated` | Cria aviso de pagamento disponível, com o link de pagamento (`PAYMENT_CHECKOUT_CREATED`). |
+| `ofisy-billing-events.fifo` | `PaymentConfirmed` | Cria aviso de pagamento confirmado (`PAYMENT_CONFIRMED`). |
+| `ofisy-billing-events.fifo` | `PaymentFailed` | Cria aviso de pagamento recusado ou expirado (`PAYMENT_FAILED`). |
 
 Regras de entrega:
 
@@ -207,7 +207,9 @@ Sem `DYNAMODB_TEST_ENDPOINT`, o teste de concorrência é pulado. `mvn verify` e
 
 ## Repositórios relacionados
 
-- [techchallenge-ofisy](https://github.com/15SOAT-FIAP/techchallenge-ofisy): core (pedidos, estoque e faturamento).
+- [techchallenge-ofisy](https://github.com/15SOAT-FIAP/techchallenge-ofisy): core (clientes, veículos, catálogo de serviços, usuários e ordens de serviço).
+- [ms-ofisy-billing](https://github.com/15SOAT-FIAP/ms-ofisy-billing): orçamento e pagamento, que publica os eventos de orçamento e de pagamento consumidos aqui.
+- [ms-ofisy-stock](https://github.com/15SOAT-FIAP/ms-ofisy-stock): estoque, que publica o `StockLow`.
 - [techchallenge-ofisy-auth](https://github.com/15SOAT-FIAP/techchallenge-ofisy-auth): autenticação de clientes e Lambda Authorizer.
-- [techchallenge-ofisy-eks-infra](https://github.com/15SOAT-FIAP/techchallenge-ofisy-eks-infra): infraestrutura EKS, API Gateway e observabilidade.
-- [techchallenge-ofisy-rds-infra](https://github.com/15SOAT-FIAP/techchallenge-ofisy-rds-infra): infraestrutura do banco PostgreSQL.
+- [techchallenge-ofisy-eks-infra](https://github.com/15SOAT-FIAP/techchallenge-ofisy-eks-infra): infraestrutura EKS, mensageria, API Gateway e observabilidade.
+- [techchallenge-ofisy-db-infra](https://github.com/15SOAT-FIAP/techchallenge-ofisy-db-infra): bancos de dados, incluindo a tabela DynamoDB `Notifications` deste serviço.
